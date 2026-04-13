@@ -87,7 +87,7 @@ cp -r claude-chaperone/.claude your-project/
 
 # 3. Paste the CLAUDE.md.snippet contents into your project's CLAUDE.md
 
-# 4. Verify the hooks work on your machine (22 tests, stdlib only)
+# 4. Verify the hooks work on your machine (25 tests, stdlib only)
 cd your-project && python .claude/hooks/test_hooks.py
 
 # 5. Start a fresh Claude Code session

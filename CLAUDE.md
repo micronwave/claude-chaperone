@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-- **Run the hook test suite:** `python .claude/hooks/test_hooks.py` — 22 unit + integration tests. Must be green before shipping any hook change. There is no other test suite, build step, or lint command in this repo.
+- **Run the hook test suite:** `python .claude/hooks/test_hooks.py` — 25 unit + integration tests. Must be green before shipping any hook change. There is no other test suite, build step, or lint command in this repo.
 - **Smoke-test hooks end-to-end:** see the fixture recipe in `.claude/hooks/README.md` (create `plan/current_phase.txt` + `plan/phase_1_scope.json`, trigger each hook).
 
 ## Architecture
@@ -42,3 +42,7 @@ These are load-bearing — violating any of them breaks a documented guarantee i
 ## Shell environment note
 
 This repo develops on Windows with a bash shell. Use Unix shell syntax in scripts and commands (forward slashes, `/dev/null`, not `NUL`). Hook scripts themselves are invoked via `python "$CLAUDE_PROJECT_DIR"/...` for cross-platform portability.
+
+## Audit posture
+
+Audits of plan files, phase specs, prompts, or command prose in this repo should use the **substantive-findings bar**: surface blockers AND non-blocking issues a cold-context executor would plausibly stumble on (missing registration steps, stale line numbers, unstated assumptions, ambiguity that invites wrong guesses). Skip only pure phrasing/style nits with no executor impact. Reason: this repo's artifacts are executed by fresh agents with no conversation history — the cost of under-specified guidance is a wrong build, not a re-read. Brief subagents with the same bar explicitly.

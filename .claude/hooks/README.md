@@ -10,7 +10,7 @@ Cross-platform Python hooks (Python 3.8+). Referenced from `../../settings.json`
 | `scope_drift_check.py` | PostToolUse (Edit/Write/NotebookEdit) — reads `plan/phase_<N>_scope.json` and warns when edits touch out-of-scope files. LOUD failure on missing/malformed scope. |
 | `push_confirm.py` | PreToolUse (Bash) — emits structured `permissionDecision: "ask"` JSON when the Bash command contains `git push`, forcing a user confirmation prompt. |
 | `build_log_reminder.py` | UserPromptSubmit — injects a BUILD_LOG reminder into Claude's next turn (via structured `additionalContext` JSON) when code files changed without a log update. Also echoes to stderr for the human. Uses UserPromptSubmit rather than Stop so the reminder actually reaches the agent, not just the terminal. |
-| `test_hooks.py` | Self-test suite — 22 unit + integration tests covering scope schema, path matching, git-push detection, and every hook script's payload handling + output shape. |
+| `test_hooks.py` | Self-test suite — 25 unit + integration tests covering scope schema, path matching, git-push detection, and every hook script's payload handling + output shape. |
 
 ## Activation gate
 
@@ -30,7 +30,7 @@ Run the self-test suite:
 python .claude/hooks/test_hooks.py
 ```
 
-Expected output: `Ran 22 tests in ...s` followed by `OK`. Any failure indicates a broken install.
+Expected output: `Ran 25 tests in ...s` followed by `OK`. Any failure indicates a broken install.
 
 ### Manual smoke test
 

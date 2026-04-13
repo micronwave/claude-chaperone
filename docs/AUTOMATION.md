@@ -51,7 +51,7 @@ These happen without any user intervention beyond kicking off the command.
 
 Reads `plan/current_phase.txt` to get the active phase number N, then loads `plan/phase_<N>_scope.json` using the strict schema defined at `.claude/skills/full-build-workflow/references/templates/SCOPE_SCHEMA.md`. Runs `git status --porcelain=v1 -z` to enumerate every changed path. For each path, checks:
 
-1. Is it in the universal allowlist (BUILD_LOG.md, plan/phase_<N>_* files)? → in scope
+1. Is it in the universal allowlist (BUILD_LOG.md, plan/phase_<N>_* files, plan/.build_log_reminder_state)? → in scope
 2. Does it match an exact entry in `scope.files`? → in scope
 3. Does it start with any entry in `scope.prefixes` (all of which must end in `/`)? → in scope
 4. Is it an untracked new file AND under a prefix AND `scope.allow_untracked_new` is true? → in scope
@@ -116,6 +116,8 @@ On every user prompt submit, checks if code files (anything outside `plan/` and 
 
 Non-blocking — always exits 0 even on malformed stdin, so a hook bug can never reject the user's prompt.
 
+State file: `plan/.build_log_reminder_state` — single-line cache of `BUILD_LOG.md`'s mtime at last injection, used to suppress repeat nudges between updates. Safe to delete; will be recreated on next fire. Add `plan/` to your project's `.gitignore` to avoid tracking workflow scratch state.
+
 ---
 
 ## Failure modes & degradation
@@ -128,4 +130,4 @@ Non-blocking — always exits 0 even on malformed stdin, so a hook bug can never
 | Git not available | `git_changed_paths()` returns empty list; hooks assume nothing changed and skip. (Rare — Claude Code requires git for most workflows.) |
 | Hook spec version mismatch | If Claude Code changes the stdin JSON schema, `push_confirm.py` and `build_log_reminder.py` may fail to parse fields. Both default to no-op in that case — safer than bad enforcement. `scope_drift_check.py` doesn't depend on payload fields, so it's unaffected. |
 
-Recommended post-install validation: run `python .claude/hooks/test_hooks.py`. All 22 tests should pass. Any failure indicates a broken install.
+Recommended post-install validation: run `python .claude/hooks/test_hooks.py`. All 25 tests should pass. Any failure indicates a broken install.

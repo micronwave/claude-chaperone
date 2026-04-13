@@ -379,6 +379,111 @@ class BuildLogReminderOutputShapeTests(unittest.TestCase):
         self.assertEqual(result.stderr.strip(), "")
 
 
+class BuildLogReminderDebounceTests(unittest.TestCase):
+    """Verify the UserPromptSubmit reminder debounces on BUILD_LOG.md's mtime
+    so a long /build session doesn't re-inject the same nudge every turn."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="cbw_test_"))
+        (self.tmp / "plan").mkdir()
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        # Git repo with a tracked+modified code file and no BUILD_LOG change —
+        # mirrors BuildLogReminderOutputShapeTests.setUp so the hook reaches
+        # the emit path instead of returning early at the git_changed_paths() gate.
+        subprocess.run(["git", "init", "-q"], cwd=self.tmp, check=False)
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit",
+             "--allow-empty", "-q", "-m", "init"],
+            cwd=self.tmp, check=False,
+        )
+        (self.tmp / "code.py").write_text("x = 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "code.py"], cwd=self.tmp, check=False)
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit",
+             "-q", "-m", "add"],
+            cwd=self.tmp, check=False,
+        )
+        (self.tmp / "code.py").write_text("x = 2\n", encoding="utf-8")
+        self._orig_env = os.environ.get("CLAUDE_PROJECT_DIR")
+        os.environ["CLAUDE_PROJECT_DIR"] = str(self.tmp)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        if self._orig_env is None:
+            os.environ.pop("CLAUDE_PROJECT_DIR", None)
+        else:
+            os.environ["CLAUDE_PROJECT_DIR"] = self._orig_env
+
+    def _invoke_hook(self) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(HOOKS_DIR / "build_log_reminder.py")],
+            input=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "continue"}),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env={**os.environ, "CLAUDE_PROJECT_DIR": str(self.tmp)},
+            check=False,
+        )
+
+    def test_first_fire_emits_and_writes_state(self) -> None:
+        result = self._invoke_hook()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertTrue(result.stdout.strip(), "expected structured JSON on stdout")
+        payload = json.loads(result.stdout)
+        hso = payload["hookSpecificOutput"]
+        self.assertEqual(hso["hookEventName"], "UserPromptSubmit")
+        self.assertIn("BUILD_LOG.md", hso["additionalContext"])
+        self.assertIn("REMINDER", result.stderr)
+        state_file = self.tmp / "plan" / ".build_log_reminder_state"
+        self.assertTrue(state_file.exists())
+        self.assertEqual(state_file.read_text(encoding="utf-8").strip(), "absent")
+
+    def test_second_fire_suppressed_when_signal_unchanged(self) -> None:
+        # Prime the state file via a real first fire, then invoke again.
+        first = self._invoke_hook()
+        self.assertEqual(first.returncode, 0)
+        self.assertTrue(first.stdout.strip())
+
+        second = self._invoke_hook()
+        self.assertEqual(second.returncode, 0)
+        self.assertEqual(second.stdout.strip(), "")
+        self.assertEqual(second.stderr.strip(), "")
+        state_file = self.tmp / "plan" / ".build_log_reminder_state"
+        self.assertEqual(state_file.read_text(encoding="utf-8").strip(), "absent")
+
+    def test_build_log_touch_clears_suppression(self) -> None:
+        # First fire: state file stored as "absent".
+        first = self._invoke_hook()
+        self.assertEqual(first.returncode, 0)
+        state_file = self.tmp / "plan" / ".build_log_reminder_state"
+        self.assertEqual(state_file.read_text(encoding="utf-8").strip(), "absent")
+
+        # Create BUILD_LOG.md AND commit it clean. If left uncommitted it
+        # shows up in `git status`, which trips the hook's existing
+        # "BUILD_LOG.md already in diff this cycle" filter and makes the hook
+        # exit silently — the debounce branch would never run and this test
+        # would greenlight a vacuous result.
+        (self.tmp / "BUILD_LOG.md").write_text("- note\n", encoding="utf-8")
+        subprocess.run(["git", "add", "BUILD_LOG.md"], cwd=self.tmp, check=False)
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit",
+             "-q", "-m", "add build log"],
+            cwd=self.tmp, check=False,
+        )
+        # code.py is still modified from setUp — keeps the hook on the emit path.
+
+        third = self._invoke_hook()
+        self.assertEqual(third.returncode, 0, msg=f"stderr: {third.stderr}")
+        self.assertTrue(third.stdout.strip(), "expected re-emit after BUILD_LOG mtime changed")
+        payload = json.loads(third.stdout)
+        self.assertIn("BUILD_LOG.md", payload["hookSpecificOutput"]["additionalContext"])
+        contents = state_file.read_text(encoding="utf-8").strip()
+        self.assertTrue(
+            contents.isdigit(),
+            f"expected numeric mtime signal, got {contents!r}",
+        )
+
+
 def main() -> int:
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
@@ -388,6 +493,7 @@ def main() -> int:
         GitPushDetectionTests,
         HookScriptIntegrationTests,
         BuildLogReminderOutputShapeTests,
+        BuildLogReminderDebounceTests,
     ):
         suite.addTests(loader.loadTestsFromTestCase(cls))
     runner = unittest.TextTestRunner(verbosity=2)

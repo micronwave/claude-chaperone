@@ -1,6 +1,6 @@
 # Contributing
 
-Run `python .claude/hooks/test_hooks.py` before opening a PR — all 22 tests need to pass.
+Run `python .claude/hooks/test_hooks.py` before opening a PR — all 25 tests need to pass.
 
 Hooks are stdlib-only and Python 3.8+. No third-party deps, ever.
 

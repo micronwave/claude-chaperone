@@ -73,10 +73,26 @@ def main() -> int:
     if any(e.path == "BUILD_LOG.md" for e in entries):
         return 0  # already logged this cycle
 
+    # Debounce: skip re-injection while BUILD_LOG.md's mtime is unchanged
+    # since the last emit. When BUILD_LOG.md is appended (or created, or
+    # committed by /wrap), its mtime shifts and the stored signal no longer
+    # matches — we re-emit exactly once with the new signal.
+    signal_path = hu.project_root() / "plan" / ".build_log_reminder_state"
+    build_log = hu.project_root() / "BUILD_LOG.md"
+    current_signal = (
+        str(build_log.stat().st_mtime_ns) if build_log.exists() else "absent"
+    )
+    if (
+        signal_path.exists()
+        and signal_path.read_text(encoding="utf-8").strip() == current_signal
+    ):
+        return 0  # already emitted for this BUILD_LOG state — stay quiet
+
     # Primary: inject into Claude's context for its next turn.
     hu.emit_additional_context(REMINDER_MESSAGE)
     # Secondary: surface to the user in transcript mode (Ctrl-R).
     hu.emit_stderr_warning(REMINDER_MESSAGE)
+    signal_path.write_text(current_signal, encoding="utf-8")
     return 0  # non-blocking
 
 
