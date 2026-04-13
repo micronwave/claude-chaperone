@@ -33,7 +33,7 @@ Long sessions are brittle. Every failure mode below has a mechanism in this repo
 
 Three parallel pieces. Each carries its own weight; you can disable any of them without breaking the others.
 
-### <a href="#whats-in-it"><img src="https://img.shields.io/badge/1-Command-0366d6?style=for-the-badge" alt="Command" /></a>
+### <a href="#whats-in-it"><img src="https://img.shields.io/badge/12-Commands-0366d6?style=for-the-badge" alt="Commands" /></a>
 
 *12 slash commands · one per stage.* `/clear` between them so each runs in a fresh context.
 
@@ -43,7 +43,7 @@ Three parallel pieces. Each carries its own weight; you can disable any of them 
              /wrap  ←  /test  ←  /re-audit  ←  /execute  ←  /build-audit  ←  /build
 ```
 
-### <a href="#whats-in-it"><img src="https://img.shields.io/badge/2-Hooks-3776ab?style=for-the-badge" alt="Hooks" /></a>
+### <a href="#whats-in-it"><img src="https://img.shields.io/badge/3-Hooks-3776ab?style=for-the-badge" alt="Hooks" /></a>
 
 *3 Python scripts · stdlib only · zero install.*
 
@@ -53,7 +53,7 @@ Three parallel pieces. Each carries its own weight; you can disable any of them 
 | `push_confirm.py` | `git push` | Forces a permission prompt |
 | `build_log_reminder.py` | User prompt | Nags when code changes outrun `BUILD_LOG.md` |
 
-### <a href="#whats-in-it"><img src="https://img.shields.io/badge/3-Skills-f48024?style=for-the-badge" alt="Skills" /></a>
+### <a href="#whats-in-it"><img src="https://img.shields.io/badge/1-Skill-f48024?style=for-the-badge" alt="Skill" /></a>
 
 *1 orchestrator · auto-triggers the sequence.* Pulls you through the full flow on phrases like `new feature`, `build phase`, `audit`, or `wrap up` — no need to remember which command comes next.
 
@@ -174,7 +174,7 @@ Next: `/clear`, then `/plan-audit`.
 Every stage transition runs `/clear` first to drop stale context — omitted from the diagram for readability.
 
 <details>
-<summary><a href="#flow"><img src="https://img.shields.io/badge/%E2%96%B6%20click%20to%20expand-Flow%20diagram-2ea44f?style=for-the-badge" alt="Click to expand flow diagram" /></a></summary>
+<summary><img src="https://img.shields.io/badge/click%20to%20expand-Flow%20diagram-2ea44f?style=for-the-badge" alt="Click to expand flow diagram" /></summary>
 
 <br>
 
@@ -211,27 +211,6 @@ flowchart TD
 ```
 
 </details>
-
-## Repo layout
-
-```
-claude-chaperone/
-├── README.md
-├── CLAUDE.md.snippet              ← paste into your project's CLAUDE.md
-├── settings.json                  ← hooks registration
-├── docs/
-│   ├── WORKFLOW.md                ← full rationale + gate definitions
-│   ├── AUTOMATION.md              ← what is and isn't automated, and why
-│   └── SECOND_OPINION.md          ← optional external-tool integration
-└── .claude/
-    ├── skills/full-build-workflow/
-    │   ├── SKILL.md               ← orchestration + keyword triggers
-    │   └── references/
-    │       ├── templates/         ← plan, handoff, audit_fix, build_log
-    │       └── prompts/           ← reusable prompt fragments
-    ├── commands/                  ← the 12 slash commands
-    └── hooks/                     ← scope-drift, push-confirm, log-nag
-```
 
 ## Rules
 
