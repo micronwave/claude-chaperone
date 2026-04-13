@@ -72,6 +72,32 @@ Optional: `codex`, `gemini`, or `aider` on `PATH` for second-opinion audits. If 
 
 ## Quick start
 
+One command, from anywhere:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/micronwave/claude-chaperone/main/install.py | python - --target .
+```
+
+Or from a clone:
+
+```bash
+git clone https://github.com/micronwave/claude-chaperone.git
+python claude-chaperone/install.py --target /path/to/your-project
+```
+
+Then, in a fresh Claude Code session inside your project:
+
+```
+/meta-prompt "rough idea of what you want to build"
+```
+
+The installer is idempotent — run it again any time to re-sync. Pass `--force` to overwrite local edits to chaperone-owned files.
+
+<details>
+<summary><b>Manual install (if you want to see the diff before running a script)</b></summary>
+
+<br>
+
 ```bash
 # 0. Clone the repo
 git clone https://github.com/micronwave/claude-chaperone.git
@@ -93,6 +119,8 @@ cd your-project && python .claude/hooks/test_hooks.py
 # 5. Start a fresh Claude Code session
 /meta-prompt "rough idea of what you want to build"
 ```
+
+</details>
 
 ---
 
