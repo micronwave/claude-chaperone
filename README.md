@@ -103,7 +103,7 @@ flowchart TD
     N --> O[/"build-audit<br/>diff-scoped, thorough"/]
     O --> P[/"execute<br/>apply audit_fix"/]
     P --> Q[/clear/]
-    Q --> R[/re-audit]
+    Q --> R[/re-audit/]
     R --> R2{Issues?}
     R2 -->|"Yes, <3 loops"| P
     R2 -->|"Yes, ≥3 loops"| R3[Escalate to user]
