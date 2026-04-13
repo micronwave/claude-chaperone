@@ -28,3 +28,6 @@ desktop.ini
 
 # Local-only design notes for features that aren't being built
 /deferred-plans/
+
+# Local-only active build plans — tracked in working dir, never pushed
+/workflow_revamp.md
