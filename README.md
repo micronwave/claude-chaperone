@@ -29,16 +29,13 @@ Long sessions are brittle. Every failure mode below has a mechanism in this repo
 | **Infinite polish** | Audit, fix, audit, fix, with no exit | `/re-audit` caps at 3 loops |
 | **Forgotten discipline** | Build logs, commits, handoffs skipped by accident | `/wrap` + `build_log_reminder.py` |
 
-> [!TIP]
-> The left two columns are the pain. The right column is what you get in exchange for adopting the workflow.
-
 ## What's in it
 
 Three parallel pieces. Each carries its own weight; you can disable any of them without breaking the others.
 
-### ![Commands](https://img.shields.io/badge/1-Commands-0366d6?style=for-the-badge) &nbsp; <sub>12 slash commands · one per stage</sub>
+### <a href="#whats-in-it"><img src="https://img.shields.io/badge/1-Command-0366d6?style=for-the-badge" alt="Command" /></a>
 
-`/clear` between them so each runs in a fresh context.
+*12 slash commands · one per stage.* `/clear` between them so each runs in a fresh context.
 
 ```
 /meta-prompt  →  /plan  →  /plan-audit  →  /split-phases  →  /phase-audit
@@ -46,7 +43,9 @@ Three parallel pieces. Each carries its own weight; you can disable any of them 
              /wrap  ←  /test  ←  /re-audit  ←  /execute  ←  /build-audit  ←  /build
 ```
 
-### ![Hooks](https://img.shields.io/badge/2-Hooks-3776ab?style=for-the-badge) &nbsp; <sub>3 Python scripts · stdlib only · zero install</sub>
+### <a href="#whats-in-it"><img src="https://img.shields.io/badge/2-Hooks-3776ab?style=for-the-badge" alt="Hooks" /></a>
+
+*3 Python scripts · stdlib only · zero install.*
 
 | Hook | Fires on | What it does |
 |---|---|---|
@@ -54,9 +53,9 @@ Three parallel pieces. Each carries its own weight; you can disable any of them 
 | `push_confirm.py` | `git push` | Forces a permission prompt |
 | `build_log_reminder.py` | User prompt | Nags when code changes outrun `BUILD_LOG.md` |
 
-### ![Skill](https://img.shields.io/badge/3-Skill-f48024?style=for-the-badge) &nbsp; <sub>1 orchestrator · auto-triggers the sequence</sub>
+### <a href="#whats-in-it"><img src="https://img.shields.io/badge/3-Skills-f48024?style=for-the-badge" alt="Skills" /></a>
 
-Pulls you through the full flow on phrases like `new feature`, `build phase`, `audit`, or `wrap up` — no need to remember which command comes next.
+*1 orchestrator · auto-triggers the sequence.* Pulls you through the full flow on phrases like `new feature`, `build phase`, `audit`, or `wrap up` — no need to remember which command comes next.
 
 ---
 
@@ -175,7 +174,7 @@ Next: `/clear`, then `/plan-audit`.
 Every stage transition runs `/clear` first to drop stale context — omitted from the diagram for readability.
 
 <details>
-<summary><img src="https://img.shields.io/badge/%E2%96%B6%20click%20to%20expand-Flow%20diagram-2ea44f?style=for-the-badge" alt="Click to expand flow diagram" /></summary>
+<summary><a href="#flow"><img src="https://img.shields.io/badge/%E2%96%B6%20click%20to%20expand-Flow%20diagram-2ea44f?style=for-the-badge" alt="Click to expand flow diagram" /></a></summary>
 
 <br>
 
