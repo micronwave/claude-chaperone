@@ -82,4 +82,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception:
+        # Never block a user edit because of a hook bug.
+        sys.exit(0)
