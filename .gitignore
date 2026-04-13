@@ -25,3 +25,6 @@ desktop.ini
 
 # Claude Code per-developer overrides (not part of the distributed template)
 /.claude/settings.local.json
+
+# Local-only design notes for features that aren't being built
+/deferred-plans/
