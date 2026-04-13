@@ -6,8 +6,10 @@
 
 A folder you copy into a project to force Claude Code through a structured build flow: plan first, split into phases, test, audit its own diff, commit, move on. Twelve slash commands, three Python hooks (stdlib only, no install), one skill that ties them together.
 
-**You** make the architecture calls, approve the plan, `/clear` between stages.
-**Claude** does the mechanical work, test-first, inside a declared scope, with the diff audited before you see it.
+| Who | Does what |
+|---|---|
+| **You** | Make the architecture calls, approve the plan, `/clear` between stages |
+| **Claude** | The mechanical work: test-first, inside a declared scope, with the diff audited before you see it |
 
 > [!NOTE]
 > Dormant unless `plan/current_phase.txt` exists in the project. Dropping the folder into a repo changes nothing until you actually start a phase.
@@ -16,22 +18,27 @@ A folder you copy into a project to force Claude Code through a structured build
 
 ## Why this exists
 
-Long sessions are brittle:
+Long sessions are brittle. Every failure mode below has a mechanism in this repo that catches it:
 
-| Problem | What it looks like |
-|---|---|
-| Context rot | Quality slides as the conversation fills up |
-| Scope drift | "Helpful" edits to code you didn't ask about |
-| Self-audit blind spots | Reviewing its own work, it misses the same things twice |
-| Lost state | New session guesses where the last one stopped |
-| Infinite polish | Audit, fix, audit, fix, with no exit |
-| Forgotten discipline | Build logs, commits, handoffs skipped by accident |
+| Problem | What it looks like | What handles it |
+|---|---|---|
+| **Context rot** | Quality slides as the conversation fills up | `/clear` between every stage |
+| **Scope drift** | "Helpful" edits to code you didn't ask about | `scope_drift_check.py` + declared `phase_scope.json` |
+| **Self-audit blind spots** | Reviewing its own work, it misses the same things twice | `/build-audit` runs in a fresh context |
+| **Lost state** | New session guesses where the last one stopped | `/handoff` + `BUILD_LOG.md` |
+| **Infinite polish** | Audit, fix, audit, fix, with no exit | `/re-audit` caps at 3 loops |
+| **Forgotten discipline** | Build logs, commits, handoffs skipped by accident | `/wrap` + `build_log_reminder.py` |
 
-This repo has an answer for each.
+> [!TIP]
+> The left two columns are the pain. The right column is what you get in exchange for adopting the workflow.
 
 ## What's in it
 
-**Twelve slash commands**, one per stage. You `/clear` between them so each runs in a fresh context:
+Three parallel pieces. Each carries its own weight; you can disable any of them without breaking the others.
+
+### ![Commands](https://img.shields.io/badge/1-Commands-0366d6?style=for-the-badge) &nbsp; <sub>12 slash commands · one per stage</sub>
+
+`/clear` between them so each runs in a fresh context.
 
 ```
 /meta-prompt  →  /plan  →  /plan-audit  →  /split-phases  →  /phase-audit
@@ -39,13 +46,17 @@ This repo has an answer for each.
              /wrap  ←  /test  ←  /re-audit  ←  /execute  ←  /build-audit  ←  /build
 ```
 
-**Three hooks**, pure Python stdlib, no install step:
+### ![Hooks](https://img.shields.io/badge/2-Hooks-3776ab?style=for-the-badge) &nbsp; <sub>3 Python scripts · stdlib only · zero install</sub>
 
-- `scope_drift_check.py` warns at end of turn if edits left the phase scope
-- `push_confirm.py` forces a permission prompt on `git push`
-- `build_log_reminder.py` nags when code changes have outrun `BUILD_LOG.md`
+| Hook | Fires on | What it does |
+|---|---|---|
+| `scope_drift_check.py` | End of turn | Warns if edits left the phase scope |
+| `push_confirm.py` | `git push` | Forces a permission prompt |
+| `build_log_reminder.py` | User prompt | Nags when code changes outrun `BUILD_LOG.md` |
 
-**One skill** that auto-triggers the whole sequence on phrases like "new feature", "build phase", "audit", or "wrap up".
+### ![Skill](https://img.shields.io/badge/3-Skill-f48024?style=for-the-badge) &nbsp; <sub>1 orchestrator · auto-triggers the sequence</sub>
+
+Pulls you through the full flow on phrases like `new feature`, `build phase`, `audit`, or `wrap up` — no need to remember which command comes next.
 
 ---
 
@@ -91,10 +102,36 @@ cd your-project && python .claude/hooks/test_hooks.py
 The skill auto-triggers on phrases like "new feature", "build phase", "audit", or "wrap up" — so in most sessions you just talk to Claude and it pulls you through the stages. If you want to drive manually, the slash commands map one-to-one onto the flow:
 
 1. **Kick off:** `/meta-prompt "rough idea"`. Claude expands it into a spec and surfaces ambiguities. You answer them in the same turn.
-2. **Plan:** `/clear`, then `/plan`. Claude writes a plan file. `/clear`, then `/plan-audit`. A fresh context reviews it. You approve the architecture, or loop back to `/plan`.
-3. **Split:** `/clear`, then `/split-phases`. The plan becomes one file per phase, each sized for a single session. `/phase-audit` checks the split.
-4. **Build, per phase:** `/clear` → `/build` (tests first, then implementation) → `/clear` → `/build-audit` (diff-scoped, produces `audit_fix.md`) → `/execute` (applies every fix) → `/clear` → `/re-audit` (caps at 3 loops) → `/test` → `/wrap` (appends to `BUILD_LOG.md`, commits locally, never pushes).
-5. **Pause anytime:** `/handoff` writes a self-contained state file so the next session picks up cleanly.
+
+   `/clear`
+
+2. **Plan:** `/plan`. Claude writes a plan file.
+
+   `/clear`
+
+3. **Plan audit:** `/plan-audit`. A fresh context reviews it. You approve the architecture, or loop back to step 2.
+
+   `/clear`
+
+4. **Split:** `/split-phases`. The plan becomes one file per phase, each sized for a single session.
+
+   `/clear`
+
+5. **Phase audit:** `/phase-audit` checks the split.
+
+   `/clear`
+
+6. **Build:** `/build` — tests first, then implementation.
+
+   `/clear`
+
+7. **Audit the diff:** `/build-audit` (diff-scoped, produces `audit_fix.md`), then `/execute` applies every fix.
+
+   `/clear`
+
+8. **Re-audit, test, ship:** `/re-audit` (caps at 3 loops) → `/test` → `/wrap` (appends to `BUILD_LOG.md`, commits locally, never pushes).
+
+9. **Pause anytime:** `/handoff` writes a self-contained state file so the next session picks up cleanly.
 
 Each command ends by telling you the exact next one to run, so in practice it's one keystroke per gate.
 
@@ -137,6 +174,11 @@ Next: `/clear`, then `/plan-audit`.
 
 Every stage transition runs `/clear` first to drop stale context — omitted from the diagram for readability.
 
+<details>
+<summary><img src="https://img.shields.io/badge/%E2%96%B6%20click%20to%20expand-Flow%20diagram-2ea44f?style=for-the-badge" alt="Click to expand flow diagram" /></summary>
+
+<br>
+
 ```mermaid
 flowchart TD
     A[Initial prompt] --> B[/meta-prompt/]
@@ -168,6 +210,8 @@ flowchart TD
     U -->|Yes| M
     U -->|No| V[Done]
 ```
+
+</details>
 
 ## Repo layout
 
