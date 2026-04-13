@@ -79,14 +79,14 @@ That's it. From there the skill pulls you through the stages. Between every stag
 ```mermaid
 flowchart TD
     A[Initial prompt] --> B[/meta-prompt/]
-    B --> B2{Ambiguities<br/>surfaced?}
+    B --> B2{"Ambiguities<br/>surfaced?"}
     B2 -->|Yes| B3[User resolves]
     B2 -->|No| C[/clear/]
     B3 --> C
     C --> D[/plan/]
     D --> E[/clear/]
     E --> F[/plan-audit/]
-    F --> F2{User approves<br/>architecture?}
+    F --> F2{"User approves<br/>architecture?"}
     F2 -->|No| D
     F2 -->|Yes| G[/clear/]
     G --> H[/split-phases/]
@@ -95,23 +95,23 @@ flowchart TD
     J --> K[Per phase loop]
 
     K --> L[/clear/]
-    L --> M[/build<br/>tests first]
-    M --> M2{Scope drift<br/>hook OK?}
+    L --> M[/"build<br/>tests first"/]
+    M --> M2{"Scope drift<br/>hook OK?"}
     M2 -->|No| M3[User decides]
     M2 -->|Yes| N[/clear/]
     M3 --> N
-    N --> O[/build-audit<br/>diff-scoped, thorough]
-    O --> P[/execute<br/>apply audit_fix]
+    N --> O[/"build-audit<br/>diff-scoped, thorough"/]
+    O --> P[/"execute<br/>apply audit_fix"/]
     P --> Q[/clear/]
     Q --> R[/re-audit]
     R --> R2{Issues?}
-    R2 -->|Yes, <3 loops| P
-    R2 -->|Yes, ≥3 loops| R3[Escalate to user]
+    R2 -->|"Yes, <3 loops"| P
+    R2 -->|"Yes, ≥3 loops"| R3[Escalate to user]
     R2 -->|No| S[/test/]
     R3 --> S
     S --> S2{Pass?}
     S2 -->|No| P
-    S2 -->|Yes| T[/wrap<br/>build log + commit]
+    S2 -->|Yes| T[/"wrap<br/>build log + commit"/]
     T --> U{More phases?}
     U -->|Yes| L
     U -->|No| V[Done]
