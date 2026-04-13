@@ -2,6 +2,13 @@
 
 All notable changes to `claude-chaperone` will be documented here.
 
+## Unreleased
+
+- Debounce `build_log_reminder` so repeat prompts don't re-inject the same nudge.
+- Add exception guard to `scope_drift_check` to match the non-blocking pattern of other hooks.
+- Thin `build.md` to orchestration; behavioral rules live in `build-prompt.md`.
+- Test suite: 22 → 25.
+
 ## v0 — initial release
 
 - 12 slash commands covering the full flow: `/meta-prompt` → `/plan` → `/plan-audit` → `/split-phases` → `/phase-audit` → `/build` → `/build-audit` → `/execute` → `/re-audit` → `/test` → `/wrap` + `/handoff`.
