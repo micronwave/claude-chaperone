@@ -1,0 +1,42 @@
+# Paste this section into your project's CLAUDE.md
+
+## Build Workflow
+
+This project uses [`claude-chaperone`](https://github.com/micronwave/claude-chaperone) for any non-trivial, multi-phase work. The workflow is in `.claude/skills/full-build-workflow/SKILL.md` and auto-triggers when you mention: "new feature", "build phase", "start phase", "audit", "handoff", or "wrap up".
+
+**Manual entry points (slash commands):**
+
+| Command | Purpose |
+|---|---|
+| `/meta-prompt` | Expand a rough idea into a detailed requirements spec with ambiguities surfaced |
+| `/plan` | Generate comprehensive plan file from meta-prompt |
+| `/plan-audit` | Comprehensive audit of the plan file (feasibility, scope, testability) |
+| `/split-phases` | Split plan into phase files sized for single sessions |
+| `/phase-audit` | Audit each phase for self-containedness and dependencies |
+| `/build` | Execute a phase (tests first, implementation second, append build log throughout) |
+| `/build-audit` | Comprehensive diff-scoped audit → produces `audit_fix.md` |
+| `/execute` | Apply every item in `audit_fix.md` |
+| `/re-audit` | Re-audit the just-executed changes (max 3 loops before escalation) |
+| `/test` | Run tests; if red, loop to `/execute` |
+| `/wrap` | Append to BUILD_LOG.md + local commit (never auto-pushes) |
+| `/handoff` | Write phase handoff file for next session |
+
+**Non-negotiable rules (enforced by hooks):**
+
+- Always `/clear` between workflow stages. Stale context is the #1 quality killer.
+- Never auto-push to a remote. `git push` triggers a permission prompt via the `push_confirm.py` hook — the user must click through.
+- Never edit files outside the current phase's `plan/phase_<N>_scope.json`. The `scope_drift_check.py` hook surfaces drift at end of turn; catch it sooner at decision time.
+- Always append to `BUILD_LOG.md` during a build phase, not only at wrap time.
+- Max 3 re-audit iterations. On the 3rd failure, escalate to the user with a summary of remaining issues.
+
+**Scope contract format:** Each phase has a `plan/phase_<N>_scope.json` file with a strict schema. See `.claude/skills/full-build-workflow/references/templates/SCOPE_SCHEMA.md`. The hook LOUDLY fails on missing/malformed scope files — it never silently passes every file as in-scope.
+
+**Second-opinion tools (optional):**
+
+If any of these CLIs are installed and on `PATH`, `/build-audit` and `/re-audit` will invoke them in addition to Claude's own audit pass:
+
+- `codex` — OpenAI Codex CLI
+- `gemini` — Google Gemini CLI
+- `aider` — Aider
+
+If none are available, audits fall back to an isolated subagent (same model, fresh context) — still meaningful because the subagent doesn't share the build session's conversational baggage.

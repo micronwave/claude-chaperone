@@ -1,0 +1,18 @@
+{
+  "$schema_comment": "Machine-readable scope contract for a single phase. Read by .claude/hooks/scope_drift_check.py. DO NOT rename fields. Any missing/malformed scope file causes a LOUD hook failure (not silent). Paths use forward slashes on all platforms; git reports forward slashes.",
+  "schema_version": 1,
+  "phase_number": 1,
+  "phase_name": "<short label — e.g., 'user auth scaffolding'>",
+  "scope": {
+    "files": [
+      "path/to/file_one.py",
+      "path/to/file_two.py",
+      "tests/test_thing.py"
+    ],
+    "prefixes": [
+      "docs/feature_x/"
+    ],
+    "allow_untracked_new": false
+  },
+  "notes": "Optional free-text notes about the scope. Ignored by the hook."
+}

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Downstream workflow artifacts — if this repo is ever dogfooded,
+# keep the working files out of the distributed template.
+/plan/
+/BUILD_LOG.md
+/audit_fix.md
+/handoff.md
+
+# Claude Code per-developer overrides (not part of the distributed template)
+/.claude/settings.local.json

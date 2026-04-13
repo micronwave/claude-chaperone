@@ -1,0 +1,45 @@
+{
+  "$comment": "Hooks configuration for claude-chaperone. Merge into your project's .claude/settings.json, preserving any existing hook entries (append these under each hookEventName array rather than replacing the whole hooks object). All hooks use Python 3.8+ (stdlib only). Script paths use $CLAUDE_PROJECT_DIR for portability across cwd changes.",
+
+  "hooks": {
+    "PostToolUse": [
+      {
+        "$comment": "After any file edit, if the workflow is active, warn if edits touched files outside the declared phase scope.",
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/scope_drift_check.py"
+          }
+        ]
+      }
+    ],
+
+    "PreToolUse": [
+      {
+        "$comment": "Before a Bash call, force a permission prompt for `git push` via structured JSON output (permissionDecision: ask). The `if` field narrows hook process spawning to push commands only (requires Claude Code v2.1.85+; earlier versions fall through to the command's own detection).",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git push*)",
+            "command": "python \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/push_confirm.py"
+          }
+        ]
+      }
+    ],
+
+    "UserPromptSubmit": [
+      {
+        "$comment": "When the user submits a prompt: if code files were edited without a BUILD_LOG.md update, inject a reminder into Claude's context (via structured additionalContext) AND echo to stderr for the human. Must be UserPromptSubmit, not Stop — Stop-hook stdout is not added to Claude's conversation, so a Stop-based reminder only reaches the human, not the agent.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/build_log_reminder.py"
+          }
+        ]
+      }
+    ]
+  }
+}
