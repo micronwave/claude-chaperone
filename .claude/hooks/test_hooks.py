@@ -484,6 +484,262 @@ class BuildLogReminderDebounceTests(unittest.TestCase):
         )
 
 
+class SessionStartHookTests(unittest.TestCase):
+    """Verify session_start.py injects the correct workflow-state snapshot.
+
+    Runs the hook as a subprocess with a fresh tempdir per test.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="cbw_ss_"))
+        (self.tmp / "plan").mkdir()
+        self._orig_env = os.environ.get("CLAUDE_PROJECT_DIR")
+        os.environ["CLAUDE_PROJECT_DIR"] = str(self.tmp)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        if self._orig_env is None:
+            os.environ.pop("CLAUDE_PROJECT_DIR", None)
+        else:
+            os.environ["CLAUDE_PROJECT_DIR"] = self._orig_env
+
+    def _write_scope(self, phase: int, name: str = "test phase") -> None:
+        (self.tmp / "plan" / f"phase_{phase}_scope.json").write_text(
+            json.dumps({
+                "schema_version": 1,
+                "phase_number": phase,
+                "phase_name": name,
+                "scope": {"files": [], "prefixes": []},
+            }),
+            encoding="utf-8",
+        )
+
+    def _run(self, payload: dict | None = None) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(HOOKS_DIR / "session_start.py")],
+            input=json.dumps(payload or {
+                "session_id": "t",
+                "transcript_path": "",
+                "cwd": str(self.tmp),
+                "hook_event_name": "SessionStart",
+                "source": "clear",
+            }),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env={**os.environ, "CLAUDE_PROJECT_DIR": str(self.tmp)},
+            check=False,
+        )
+
+    def _parse_context(self, stdout: str) -> str:
+        payload = json.loads(stdout)
+        hso = payload["hookSpecificOutput"]
+        self.assertEqual(hso["hookEventName"], "SessionStart")
+        return hso["additionalContext"]
+
+    # -- 1. Silent when workflow inactive (no plan/ markers) ------------------
+    def test_silent_when_no_plan_markers(self) -> None:
+        # plan/ dir exists (from setUp) but has no markers at all.
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertEqual(result.stdout.strip(), "")
+        self.assertEqual(result.stderr.strip(), "")
+
+    def test_silent_when_plan_dir_missing(self) -> None:
+        shutil.rmtree(self.tmp / "plan", ignore_errors=True)
+        result = self._run()
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.strip(), "")
+
+    # -- 2. Silent on malformed current_phase.txt doesn't crash, still emits --
+    def test_malformed_current_phase_still_safe(self) -> None:
+        # Unreadable current_phase.txt → read_current_phase returns None.
+        # With no other markers, the hook should exit silently (no crash).
+        (self.tmp / "plan" / "current_phase.txt").write_text(
+            "not_a_number", encoding="utf-8"
+        )
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertEqual(result.stdout.strip(), "")
+
+    # -- 3. Injects state when phase active with all artifacts ---------------
+    def test_injects_state_when_phase_active(self) -> None:
+        (self.tmp / "plan" / "current_phase.txt").write_text("2", encoding="utf-8")
+        self._write_scope(2, name="dark mode toggle")
+        (self.tmp / "plan" / "phase_2.md").write_text("# Phase 2\n", encoding="utf-8")
+        (self.tmp / "BUILD_LOG.md").write_text(
+            "# Build log\n\n## 2026-04-10 12:00 — Phase 1 wrap\n\n"
+            "- did stuff\n\n"
+            "## 2026-04-12 09:30 — Phase 2 build started\n\n"
+            "- started\n",
+            encoding="utf-8",
+        )
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        ctx = self._parse_context(result.stdout)
+        self.assertIn("Active phase: 2", ctx)
+        self.assertIn("dark mode toggle", ctx)
+        self.assertIn("Phase 2 build started", ctx)
+        self.assertIn("plan/phase_2.md", ctx)
+
+    # -- 4. Missing scope JSON → phase_name "unknown", no SCOPE_DRIFT err ----
+    def test_missing_scope_json_graceful(self) -> None:
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        (self.tmp / "plan" / "phase_1.md").write_text("# Phase 1\n", encoding="utf-8")
+        # No phase_1_scope.json.
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        ctx = self._parse_context(result.stdout)
+        self.assertIn('"unknown"', ctx)
+        # Crucially, session_start does NOT emit scope_drift's loud error.
+        self.assertNotIn("SCOPE_DRIFT_HOOK_ERROR", result.stderr)
+
+    # -- 5. Missing BUILD_LOG.md reported cleanly ----------------------------
+    def test_missing_build_log_reported(self) -> None:
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        self._write_scope(1)
+        result = self._run()
+        self.assertEqual(result.returncode, 0)
+        ctx = self._parse_context(result.stdout)
+        self.assertIn("BUILD_LOG.md missing", ctx)
+
+    # -- 6. Escalation pending flagged, next-step warns off advancement ------
+    def test_escalation_pending_flagged(self) -> None:
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        self._write_scope(1)
+        (self.tmp / "plan" / "phase_1_escalation.md").write_text(
+            "# Escalation\n\nOptions: accept / refactor / defer\n",
+            encoding="utf-8",
+        )
+        result = self._run()
+        self.assertEqual(result.returncode, 0)
+        ctx = self._parse_context(result.stdout)
+        self.assertIn("escalation pending", ctx)
+        self.assertIn("user decision", ctx)
+        # Must NOT nominate a forward-advancing slash command.
+        self.assertNotIn("/execute", ctx)
+
+    # -- 7. Re-audit loop counter reported -----------------------------------
+    def test_loop_counter_reported(self) -> None:
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        self._write_scope(1)
+        (self.tmp / "plan" / "phase_1_loop.txt").write_text("2", encoding="utf-8")
+        (self.tmp / "plan" / "phase_1_audit_fix.md").write_text(
+            "- fix thing\n", encoding="utf-8"
+        )
+        result = self._run()
+        self.assertEqual(result.returncode, 0)
+        ctx = self._parse_context(result.stdout)
+        self.assertIn("2/3", ctx)
+        self.assertIn("mid re-audit loop", ctx)
+
+    # -- 8. Stage heuristic: meta written, no plan ---------------------------
+    def test_stage_meta_only(self) -> None:
+        (self.tmp / "plan" / "meta.md").write_text("# Meta\n", encoding="utf-8")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        ctx = self._parse_context(result.stdout)
+        self.assertIn("/plan", ctx)
+        self.assertIn("meta-prompt written", ctx)
+
+    # -- 9. Stage heuristic: plan audited, awaiting approval -----------------
+    def test_stage_plan_audited(self) -> None:
+        (self.tmp / "plan" / "meta.md").write_text("# Meta\n", encoding="utf-8")
+        (self.tmp / "plan" / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        (self.tmp / "plan" / "plan_audit.md").write_text("# Audit\n", encoding="utf-8")
+        result = self._run()
+        self.assertEqual(result.returncode, 0)
+        ctx = self._parse_context(result.stdout)
+        # Either of these strings acceptable per plan text
+        self.assertTrue(
+            "awaiting approval" in ctx or "/split-phases" in ctx,
+            f"expected approval/split-phases hint, got: {ctx}",
+        )
+
+    # -- 10. Stage heuristic: mid re-audit suggests /execute -----------------
+    def test_stage_mid_reaudit(self) -> None:
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        self._write_scope(1)
+        (self.tmp / "plan" / "phase_1_audit_fix.md").write_text(
+            "- fix\n", encoding="utf-8"
+        )
+        (self.tmp / "plan" / "phase_1_loop.txt").write_text("1", encoding="utf-8")
+        result = self._run()
+        self.assertEqual(result.returncode, 0)
+        ctx = self._parse_context(result.stdout)
+        self.assertIn("/execute", ctx)
+
+    # -- 11. Truncation under large artifact inventory -----------------------
+    def test_truncates_large_artifact_inventory(self) -> None:
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        self._write_scope(1)
+        # Create 50 fake phase_1_*.md files.
+        for i in range(50):
+            (self.tmp / "plan" / f"phase_1_extra_{i:02d}.md").write_text(
+                "x\n", encoding="utf-8"
+            )
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        ctx = self._parse_context(result.stdout)
+        self.assertLess(len(ctx.encode("utf-8")), 4096)
+        self.assertIn("more artifacts omitted", ctx)
+
+    # -- 11b. Regression: phase_1 must not match phase_10_*.md inventory ----
+    def test_phase_prefix_no_collision(self) -> None:
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        self._write_scope(1)
+        (self.tmp / "plan" / "phase_1.md").write_text("x", encoding="utf-8")
+        # These must NOT appear in phase 1's artifact list even though their
+        # names begin with "phase_1" (naive startswith would match).
+        (self.tmp / "plan" / "phase_10.md").write_text("x", encoding="utf-8")
+        (self.tmp / "plan" / "phase_11_notes.md").write_text("x", encoding="utf-8")
+        result = self._run()
+        self.assertEqual(result.returncode, 0)
+        ctx = self._parse_context(result.stdout)
+        self.assertIn("plan/phase_1.md", ctx)
+        self.assertNotIn("plan/phase_10.md", ctx)
+        self.assertNotIn("plan/phase_11_notes.md", ctx)
+
+    # -- 11c. Pre-phase inventory must include phase_<N>.md when current_phase
+    #         is not yet set. Regression: Codex-flagged misreport where
+    #         _workflow_has_any_marker activates on phase_1.md but
+    #         _inventory_artifacts previously skipped it in the pre-phase
+    #         branch, producing a snapshot whose inventory contradicted the
+    #         "phases split" heuristic.
+    def test_pre_phase_inventory_includes_phase_markers(self) -> None:
+        (self.tmp / "plan" / "phase_1.md").write_text("# Phase 1\n", encoding="utf-8")
+        (self.tmp / "plan" / "phase_2.md").write_text("# Phase 2\n", encoding="utf-8")
+        # current_phase.txt intentionally absent.
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        ctx = self._parse_context(result.stdout)
+        self.assertIn("plan/phase_1.md", ctx)
+        self.assertIn("plan/phase_2.md", ctx)
+        # Stage heuristic should still fire for "phases split".
+        self.assertIn("phases split", ctx)
+
+    # -- 12. Exception in main loop doesn't crash ----------------------------
+    def test_crash_exits_zero(self) -> None:
+        # Write a payload that would crash if stdin read failed, plus an
+        # unreadable plan/ by making it a symlink to nowhere — skip on
+        # Windows where symlink perms are an issue. Instead, stub by running
+        # with no stdin at all (closed pipe scenario).
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        self._write_scope(1)
+        result = subprocess.run(
+            [sys.executable, str(HOOKS_DIR / "session_start.py")],
+            input="this is not valid json {{{",
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env={**os.environ, "CLAUDE_PROJECT_DIR": str(self.tmp)},
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0)
+        # Stdout may be empty (payload read returns {}) or contain a valid
+        # snapshot — both are acceptable. The contract is "never crash."
+
+
 def main() -> int:
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
@@ -494,6 +750,7 @@ def main() -> int:
         HookScriptIntegrationTests,
         BuildLogReminderOutputShapeTests,
         BuildLogReminderDebounceTests,
+        SessionStartHookTests,
     ):
         suite.addTests(loader.loadTestsFromTestCase(cls))
     runner = unittest.TextTestRunner(verbosity=2)

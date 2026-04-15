@@ -325,15 +325,36 @@ def emit_additional_context(message: str) -> None:
     """Emit UserPromptSubmit structured JSON that injects additional context
     into Claude's next response.
 
-    Per the Claude Code hook spec, UserPromptSubmit (and SessionStart) stdout
-    is the only hook-output channel that is actually added to Claude's
-    conversation context. Stop-hook stdout prints to the user's terminal but
-    is NOT seen by Claude — a common pitfall. Use this helper for any hook
-    whose purpose is to nudge the agent, not just the human.
+    Per the Claude Code hook spec, UserPromptSubmit stdout is one of the
+    channels that is actually added to Claude's conversation context (the
+    other being SessionStart; see `emit_session_start_context`). Stop-hook
+    stdout prints to the user's terminal but is NOT seen by Claude — a
+    common pitfall. Use this helper for any UserPromptSubmit hook whose
+    purpose is to nudge the agent, not just the human.
     """
     out = {
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
+            "additionalContext": message,
+        }
+    }
+    sys.stdout.write(json.dumps(out))
+    sys.stdout.flush()
+
+
+def emit_session_start_context(message: str) -> None:
+    """Emit SessionStart structured JSON that injects additional context
+    into Claude's conversation at session start.
+
+    Per the Claude Code hook spec, SessionStart stdout is added to Claude's
+    context the same way UserPromptSubmit is — the only difference is the
+    hookEventName field. Fires on new session, resume, AND after /clear
+    (distinguished by the payload's `source` field, which we don't consult:
+    the state snapshot is the same regardless of trigger).
+    """
+    out = {
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
             "additionalContext": message,
         }
     }

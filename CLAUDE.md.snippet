@@ -28,6 +28,7 @@ This project uses [`claude-chaperone`](https://github.com/micronwave/claude-chap
 - Never edit files outside the current phase's `plan/phase_<N>_scope.json`. The `scope_drift_check.py` hook surfaces drift at end of turn; catch it sooner at decision time.
 - Always append to `BUILD_LOG.md` during a build phase, not only at wrap time.
 - Max 3 re-audit iterations. On the 3rd failure, escalate to the user with a summary of remaining issues.
+- After `/clear`, Claude receives an auto-injected state snapshot (via the `session_start.py` hook) with the current phase, last BUILD_LOG entry, plan/ artifact inventory, and a suggested next slash command. No need to re-brief Claude on where the workflow is.
 
 **Scope contract format:** Each phase has a `plan/phase_<N>_scope.json` file with a strict schema. See `.claude/skills/full-build-workflow/references/templates/SCOPE_SCHEMA.md`. The hook LOUDLY fails on missing/malformed scope files — it never silently passes every file as in-scope.
 

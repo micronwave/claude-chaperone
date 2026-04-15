@@ -40,6 +40,19 @@
           }
         ]
       }
+    ],
+
+    "SessionStart": [
+      {
+        "$comment": "At session start (new session, resume, or after /clear), inject a factual workflow-state snapshot (current phase, last BUILD_LOG entry, plan/ inventory, suggested next command) into Claude's context via structured additionalContext JSON. Lets Claude pick up mid-workflow without the user re-briefing after /clear. Silent when plan/ has no workflow markers.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_start.py"
+          }
+        ]
+      }
     ]
   }
 }

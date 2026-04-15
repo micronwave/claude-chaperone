@@ -55,6 +55,7 @@ HOOKS_REGISTERED: List[str] = [
     ".claude/hooks/push_confirm.py",
     ".claude/hooks/scope_drift_check.py",
     ".claude/hooks/build_log_reminder.py",
+    ".claude/hooks/session_start.py",
 ]
 
 HOOKS_SUPPORT: List[str] = [
@@ -91,6 +92,7 @@ HOOK_REGISTRATIONS = {
     "push_confirm.py":       ("PreToolUse",       "Bash",                    "Bash(git push*)"),
     "scope_drift_check.py":  ("PostToolUse",      "Edit|Write|NotebookEdit", None),
     "build_log_reminder.py": ("UserPromptSubmit", "",                        None),
+    "session_start.py":      ("SessionStart",     "",                        None),
 }
 
 BEGIN_MARKER_FMT = "<!-- BEGIN claude-chaperone v{version} -->"
