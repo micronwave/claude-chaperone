@@ -48,6 +48,9 @@ This repo has an answer for each.
 
 **One skill** that auto-triggers the whole sequence on phrases like "new feature", "build phase", "audit", or "wrap up".
 
+> [!NOTE]
+> After every `/clear`, the session-start hook auto-injects a snapshot (current phase, last `BUILD_LOG.md` entry, `plan/` artifact inventory, re-audit loop counter, suggested next command) into Claude's context. You don't need to re-brief after a clear — just paste the next slash command.
+
 ---
 
 ## Requirements
@@ -63,29 +66,55 @@ Optional: `codex`, `gemini`, or `aider` on `PATH` for second-opinion audits. If 
 
 ## Quick start
 
+One-line install into your project:
+
 ```bash
-# 0. Clone the repo
+curl -sSL https://raw.githubusercontent.com/micronwave/claude-chaperone/main/install.py | python - --target .
+```
+
+Or from a clone:
+
+```bash
 git clone https://github.com/micronwave/claude-chaperone.git
+python claude-chaperone/install.py --target /path/to/your-project
+```
 
-# 1. Copy the .claude/ folder into your project (merge if one already exists)
-cp -r claude-chaperone/.claude your-project/
+The installer merges `settings.json` without clobbering existing hooks, appends a marker block to `CLAUDE.md`, copies commands / hooks / skill files, and runs the 40-test hook suite to verify. Idempotent — re-run to re-sync. `--force` overwrites chaperone-owned files if you've edited them locally.
 
-# 2. Merge settings.json into your project's .claude/settings.json.
-#    If you don't already have one, just copy it:
-#       cp claude-chaperone/settings.json your-project/.claude/settings.json
-#    If you do, append each entry under its hookEventName array — don't
-#    replace the whole hooks object, or you'll clobber your existing hooks.
+Then, in a fresh Claude Code session inside your project:
 
-# 3. Paste the CLAUDE.md.snippet contents into your project's CLAUDE.md
-
-# 4. Verify the hooks work on your machine (40 tests, stdlib only)
-cd your-project && python .claude/hooks/test_hooks.py
-
-# 5. Start a fresh Claude Code session
+```
 /chaperone "rough idea of what you want to build"
 ```
 
 `/chaperone` is the single memorable entry point. With an idea it launches the workflow; without arguments it reports where you are and what to run next.
+
+<details>
+<summary><b>Manual install (fallback)</b></summary>
+
+<br>
+
+If you want to see exactly what the installer does, or it fails on your system:
+
+```bash
+# 1. Clone
+git clone https://github.com/micronwave/claude-chaperone.git
+
+# 2. Copy the .claude/ folder into your project (merge if one already exists)
+cp -r claude-chaperone/.claude your-project/
+
+# 3. Merge settings.json. If you don't have one:
+cp claude-chaperone/settings.json your-project/.claude/settings.json
+# If you do, append each entry under its hookEventName array — don't
+# replace the whole hooks object, or you'll clobber your existing hooks.
+
+# 4. Paste CLAUDE.md.snippet into your project's CLAUDE.md
+
+# 5. Verify hooks (40 tests, stdlib only)
+cd your-project && python .claude/hooks/test_hooks.py
+```
+
+</details>
 
 ---
 
@@ -93,7 +122,7 @@ cd your-project && python .claude/hooks/test_hooks.py
 
 The skill auto-triggers on phrases like "new feature", "build phase", "audit", or "wrap up" — so in most sessions you just talk to Claude and it pulls you through the stages. If you want to drive manually, the slash commands map one-to-one onto the flow:
 
-1. **Kick off:** `/meta-prompt "your idea"`. Claude expands it into a spec and surfaces ambiguities. You answer them in the same turn.
+1. **Kick off:** `/chaperone "your idea"` (or `/meta-prompt "your idea"` if you want to skip the router). Claude expands it into a spec and surfaces ambiguities. You answer them in the same turn.
 
    `/clear`
 
