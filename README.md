@@ -4,7 +4,7 @@
 
 > A structured workflow for Claude Code sessions, optimized for output quality over token count.
 
-A folder you copy into a project to force Claude Code through a structured build flow: plan first, split into phases, test, audit its own diff, commit, move on. Twelve slash commands, four Python hooks (stdlib only, no install), one skill that ties them together.
+A one-line install (`curl | python`) that drops a structured build flow into any Claude Code project: plan first, split into phases, test, audit its own diff, commit, move on. Twelve slash commands, four Python hooks (stdlib only, no install), one skill that ties them together.
 
 **You** make the architecture calls, approve the plan, `/clear` between stages.
 **Claude** does the mechanical work, test-first, inside a declared scope, with the diff audited before you see it.
