@@ -28,6 +28,34 @@ sys.path.insert(0, str(HOOKS_DIR))
 import _hook_utils as hu  # noqa: E402
 
 
+def _find_git() -> str | None:
+    """Resolve the git binary, checking PATH then common Windows locations."""
+    found = shutil.which("git")
+    if found:
+        return found
+    for candidate in [
+        r"C:\Program Files\Git\cmd\git.exe",
+        r"C:\Program Files (x86)\Git\cmd\git.exe",
+    ]:
+        if Path(candidate).exists():
+            return candidate
+    return None
+
+
+GIT = _find_git()
+
+
+def _env_with_git(**extra: str) -> dict[str, str]:
+    """Return os.environ merged with extra, ensuring git's directory is on PATH."""
+    env = {**os.environ, **extra}
+    if GIT:
+        git_dir = str(Path(GIT).parent)
+        path = env.get("PATH", "")
+        if git_dir not in path:
+            env["PATH"] = git_dir + os.pathsep + path
+    return env
+
+
 class ScopeParsingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="cbw_test_"))
@@ -304,6 +332,7 @@ class HookScriptIntegrationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
 
 
+@unittest.skipIf(GIT is None, "git not found on PATH")
 class BuildLogReminderOutputShapeTests(unittest.TestCase):
     """Verify that the reminder uses the UserPromptSubmit structured-JSON
     channel (additionalContext) rather than Stop-hook semantics. This is the
@@ -314,18 +343,18 @@ class BuildLogReminderOutputShapeTests(unittest.TestCase):
         (self.tmp / "plan").mkdir()
         (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
         # Make a git repo with a tracked+modified code file and no BUILD_LOG change
-        subprocess.run(["git", "init", "-q"], cwd=self.tmp, check=False)
+        subprocess.run([GIT, "init", "-q"], cwd=self.tmp, check=True)
         subprocess.run(
-            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit",
+            [GIT, "-c", "user.email=t@t", "-c", "user.name=t", "commit",
              "--allow-empty", "-q", "-m", "init"],
-            cwd=self.tmp, check=False,
+            cwd=self.tmp, check=True,
         )
         (self.tmp / "code.py").write_text("x = 1\n", encoding="utf-8")
-        subprocess.run(["git", "add", "code.py"], cwd=self.tmp, check=False)
+        subprocess.run([GIT, "add", "code.py"], cwd=self.tmp, check=True)
         subprocess.run(
-            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit",
+            [GIT, "-c", "user.email=t@t", "-c", "user.name=t", "commit",
              "-q", "-m", "add"],
-            cwd=self.tmp, check=False,
+            cwd=self.tmp, check=True,
         )
         (self.tmp / "code.py").write_text("x = 2\n", encoding="utf-8")
         self._orig_env = os.environ.get("CLAUDE_PROJECT_DIR")
@@ -348,7 +377,7 @@ class BuildLogReminderOutputShapeTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=10,
-            env={**os.environ, "CLAUDE_PROJECT_DIR": str(self.tmp)},
+            env=_env_with_git(CLAUDE_PROJECT_DIR=str(self.tmp)),
             check=False,
         )
         self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
@@ -371,7 +400,7 @@ class BuildLogReminderOutputShapeTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=10,
-            env={**os.environ, "CLAUDE_PROJECT_DIR": str(self.tmp)},
+            env=_env_with_git(CLAUDE_PROJECT_DIR=str(self.tmp)),
             check=False,
         )
         self.assertEqual(result.returncode, 0)
@@ -379,6 +408,7 @@ class BuildLogReminderOutputShapeTests(unittest.TestCase):
         self.assertEqual(result.stderr.strip(), "")
 
 
+@unittest.skipIf(GIT is None, "git not found on PATH")
 class BuildLogReminderDebounceTests(unittest.TestCase):
     """Verify the UserPromptSubmit reminder debounces on BUILD_LOG.md's mtime
     so a long /build session doesn't re-inject the same nudge every turn."""
@@ -390,18 +420,18 @@ class BuildLogReminderDebounceTests(unittest.TestCase):
         # Git repo with a tracked+modified code file and no BUILD_LOG change —
         # mirrors BuildLogReminderOutputShapeTests.setUp so the hook reaches
         # the emit path instead of returning early at the git_changed_paths() gate.
-        subprocess.run(["git", "init", "-q"], cwd=self.tmp, check=False)
+        subprocess.run([GIT, "init", "-q"], cwd=self.tmp, check=True)
         subprocess.run(
-            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit",
+            [GIT, "-c", "user.email=t@t", "-c", "user.name=t", "commit",
              "--allow-empty", "-q", "-m", "init"],
-            cwd=self.tmp, check=False,
+            cwd=self.tmp, check=True,
         )
         (self.tmp / "code.py").write_text("x = 1\n", encoding="utf-8")
-        subprocess.run(["git", "add", "code.py"], cwd=self.tmp, check=False)
+        subprocess.run([GIT, "add", "code.py"], cwd=self.tmp, check=True)
         subprocess.run(
-            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit",
+            [GIT, "-c", "user.email=t@t", "-c", "user.name=t", "commit",
              "-q", "-m", "add"],
-            cwd=self.tmp, check=False,
+            cwd=self.tmp, check=True,
         )
         (self.tmp / "code.py").write_text("x = 2\n", encoding="utf-8")
         self._orig_env = os.environ.get("CLAUDE_PROJECT_DIR")
@@ -421,7 +451,7 @@ class BuildLogReminderDebounceTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=10,
-            env={**os.environ, "CLAUDE_PROJECT_DIR": str(self.tmp)},
+            env=_env_with_git(CLAUDE_PROJECT_DIR=str(self.tmp)),
             check=False,
         )
 
@@ -464,11 +494,11 @@ class BuildLogReminderDebounceTests(unittest.TestCase):
         # exit silently — the debounce branch would never run and this test
         # would greenlight a vacuous result.
         (self.tmp / "BUILD_LOG.md").write_text("- note\n", encoding="utf-8")
-        subprocess.run(["git", "add", "BUILD_LOG.md"], cwd=self.tmp, check=False)
+        subprocess.run([GIT, "add", "BUILD_LOG.md"], cwd=self.tmp, check=True)
         subprocess.run(
-            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit",
+            [GIT, "-c", "user.email=t@t", "-c", "user.name=t", "commit",
              "-q", "-m", "add build log"],
-            cwd=self.tmp, check=False,
+            cwd=self.tmp, check=True,
         )
         # code.py is still modified from setUp — keeps the hook on the emit path.
 
