@@ -32,3 +32,6 @@ desktop.ini
 # Local-only active build plans — tracked in working dir, never pushed
 /workflow_revamp.md
 /plans_TBD/
+
+# Installer test suite — developer-only, not shipped to downstream users
+/test_install.py

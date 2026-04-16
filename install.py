@@ -103,6 +103,9 @@ MARKER_RE = re.compile(
     r"<!-- BEGIN claude-chaperone(?: v[^ ]+)? -->.*?<!-- END claude-chaperone -->",
     re.DOTALL,
 )
+# Matches a standalone BEGIN marker (with or without version). Used to detect
+# unterminated BEGIN markers that lack a corresponding END.
+_BEGIN_ONLY_RE = re.compile(r"<!-- BEGIN claude-chaperone(?: v[^ ]+)? -->")
 # Matches the BEGIN marker with or without a version tag. Used to strip the
 # version so content-equality comparisons survive a __version__ bump.
 _BEGIN_MARKER_STRIP_RE = re.compile(r"<!-- BEGIN claude-chaperone(?: v[^ ]+)? -->")
@@ -110,7 +113,11 @@ _BEGIN_MARKER_STRIP_RE = re.compile(r"<!-- BEGIN claude-chaperone(?: v[^ ]+)? --
 # --- Source resolution (clone vs. curl) -------------------------------
 
 try:
-    SRC_DIR: Optional[Path] = Path(__file__).parent
+    # resolve() follows symlinks so a symlinked install.py (e.g., dev
+    # convenience linking to a clone) still resolves SRC_DIR to the clone
+    # root — otherwise is_clone_mode() returns False and we'd silently fall
+    # through to network fetch mode.
+    SRC_DIR: Optional[Path] = Path(__file__).resolve().parent
 except NameError:
     # `curl | python -` — __file__ is undefined on CPython 3.8+.
     SRC_DIR = None
@@ -217,6 +224,10 @@ def _atomic_replace(path: Path, mode: str, data) -> None:
     replaced = False
     try:
         try:
+            # os.fdopen itself is assumed to succeed; a failure here implies a
+            # broken Python install (e.g., missing utf-8 codec) and is out of
+            # scope — the raw fd would leak in that case, but cleanup is not
+            # feasible without reimplementing fdopen's error paths.
             if "b" in mode:
                 with os.fdopen(fd, mode) as f:
                     f.write(data)
@@ -305,20 +316,21 @@ def _find_matcher_block(arr, matcher: str) -> Optional[dict]:
 def _find_hook_entry_index(block: dict, script_name: str) -> Optional[int]:
     # Identify the hooks entry that invokes `.claude/hooks/<script_name>`.
     #
-    # Approach: shlex-tokenize the command and check each token for a path
-    # that ENDS at the token's end (so we never match inside a multi-word
-    # quoted string like `echo 'ran .claude/hooks/X.py today'`). Within a
-    # token, we also require the path to start at a non-identifier boundary
-    # so `foo.claude/hooks/X.py` doesn't spuriously match.
+    # Approach: shlex-tokenize the command and check each token. Rejects any
+    # token that isn't itself a path — only path-shaped tokens match, so a
+    # hook entry whose `command` contains the path inside a multi-word
+    # argument is never misidentified. Within a token, we also require the
+    # path to start at a non-identifier boundary so `foo.claude/hooks/X.py`
+    # doesn't spuriously match.
     #
     # This accepts the common invocation shapes:
     #   python "$CLAUDE_PROJECT_DIR"/.claude/hooks/X.py
     #   python ".claude/hooks/X.py"
     #   python /abs/path/.claude/hooks/X.py
-    #   bash -lc 'python .claude/hooks/X.py'
-    # And rejects path-mentions embedded in quoted argument text (the path
-    # ends mid-token, not at the end) and unrelated suffix matches like
-    # `X.py.backup` or `push_confirm_custom.py`.
+    # And rejects multi-word quoted strings (tokens containing whitespace
+    # after shlex), unrelated suffix matches like `X.py.backup` or
+    # `push_confirm_custom.py`, and identifier-prefixed paths like
+    # `foo.claude/hooks/X.py`.
     #
     # Windows users who hand-edited settings.json with backslashes still
     # match because we normalize separators before tokenizing. An unbalanced
@@ -339,8 +351,11 @@ def _find_hook_entry_index(block: dict, script_name: str) -> Optional[int]:
             tokens = shlex.split(cmd_norm, posix=True)
         except ValueError:
             tokens = cmd_norm.split()
-        if any(path_tail_re.search(t) for t in tokens):
-            return i
+        for t in tokens:
+            if " " in t or "\t" in t:
+                continue
+            if path_tail_re.search(t):
+                return i
     return None
 
 
@@ -523,17 +538,23 @@ def apply_merge_settings(plan: Dict[str, Any], force: bool) -> List[Tuple[str, s
     # semantically identical.
     out_text = json.dumps(tgt_settings, indent=2, ensure_ascii=False) + "\n"
 
-    # Diff-first: skip the write (and the mtime bump) when the serialized
-    # output is byte-equal to the file on disk. Unconditional writes made
-    # idempotent reruns churn the mtime and dirty git even when every hook
-    # was reported as [skip].
+    # Diff-first, CRLF-tolerant: normalize target line endings before comparing
+    # to the serialized LF output, so a CRLF target (Windows editor rewrite or
+    # git autocrlf) doesn't force a rewrite on every re-run. We read bytes so
+    # the decode step doesn't apply platform newline translation, then do the
+    # CRLF->LF fold explicitly — mirroring the artifact-copy logic above.
     if tgt_path.exists():
         try:
-            current = tgt_path.read_text(encoding="utf-8")
+            current_bytes = tgt_path.read_bytes()
         except OSError:
-            current = None
-        if current == out_text:
-            return report
+            current_bytes = None
+        if current_bytes is not None:
+            try:
+                current = current_bytes.replace(b"\r\n", b"\n").decode("utf-8")
+            except UnicodeDecodeError:
+                current = None
+            if current == out_text:
+                return report
     atomic_write_text(tgt_path, out_text)
     return report
 
@@ -577,7 +598,8 @@ def plan_inject_claude_md(target: Path, force: bool) -> Dict[str, Any]:
         "resync"         — single marker block matches body but version tag differs; silent re-sync
         "replace"        — single marker block differs in body; will be replaced (force)
         "replace-multi"  — multiple marker blocks present; first replaced + rest dropped (force)
-        "conflict"       — single or multiple marker blocks differ in body and no --force
+        "conflict"       — content mismatch (no --force), multiple blocks (no --force),
+                           or unterminated BEGIN marker (--force cannot fix)
     """
     snippet_raw = fetch_text("CLAUDE.md.snippet")
     body = _strip_snippet_header(snippet_raw).strip("\n")
@@ -601,12 +623,23 @@ def plan_inject_claude_md(target: Path, force: bool) -> Dict[str, Any]:
 
     matches = list(MARKER_RE.finditer(existing))
 
+    # Detect unterminated BEGIN markers: a BEGIN without a matching END means
+    # a prior install aborted mid-write, a bad merge, or a hand-edit. The
+    # complete MARKER_RE won't match these, so we count standalone BEGINs
+    # separately and compare.
+    begin_count = len(_BEGIN_ONLY_RE.findall(existing))
+
     plan: Dict[str, Any] = {
         "tgt_path": tgt_path,
         "existing": existing,
         "block": block,
         "matches": matches,
     }
+
+    if begin_count > len(matches):
+        plan["status"] = "conflict"
+        plan["conflict_reason"] = "unterminated"
+        return plan
 
     if not matches:
         plan["status"] = "add"
@@ -637,13 +670,14 @@ def plan_inject_claude_md(target: Path, force: bool) -> Dict[str, Any]:
         plan["conflict_reason"] = "multiple"
         return plan
     plan["status"] = "replace-multi"
+    plan["match_count"] = len(matches)
     return plan
 
 
 def apply_inject_claude_md(plan: Dict[str, Any]) -> Tuple[str, Optional[int]]:
     """Execute a validated CLAUDE.md plan. Returns (status, line).
 
-    status: "add" | "same" | "replace" | "resync"
+    status: "add" | "same" | "replace" | "replace-multi" | "resync"
     line:   1-based insertion/replacement line, or None for "same"
     """
     status = plan["status"]
@@ -689,7 +723,7 @@ def apply_inject_claude_md(plan: Dict[str, Any]) -> Tuple[str, Optional[int]]:
             last_end = m.end()
         out_parts.append(existing[last_end:])
         atomic_write_text(tgt_path, "".join(out_parts))
-        return ("replace", line_of_replacement)
+        return ("replace-multi", line_of_replacement)
 
     # "conflict" should be filtered by the caller before apply.
     raise RuntimeError(f"apply_inject_claude_md: unexpected status {status!r}")
@@ -698,7 +732,18 @@ def apply_inject_claude_md(plan: Dict[str, Any]) -> Tuple[str, Optional[int]]:
 # --- Version sentinel -------------------------------------------------
 
 def write_version(target: Path) -> None:
-    atomic_write_text(target / ".claude" / ".chaperone-version", __version__ + "\n")
+    # Idempotent: when the sentinel already records the current version, skip
+    # the write so re-runs against a fully-installed target don't bump mtimes
+    # or dirty git.
+    path = target / ".claude" / ".chaperone-version"
+    expected = __version__ + "\n"
+    if path.exists():
+        try:
+            if path.read_text(encoding="utf-8") == expected:
+                return
+        except OSError:
+            pass
+    atomic_write_text(path, expected)
 
 
 # --- Post-install test ------------------------------------------------
@@ -806,7 +851,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         had_conflict = True
     if claude_plan["status"] == "conflict":
         reason = claude_plan.get("conflict_reason", "differs")
-        if reason == "multiple":
+        if reason == "unterminated":
+            print(
+                "error: CLAUDE.md has an unterminated claude-chaperone BEGIN marker "
+                "(no matching END). Repair the file by hand or delete the stray "
+                "BEGIN, then re-run.",
+                file=sys.stderr,
+            )
+        elif reason == "multiple":
             print(
                 "error: CLAUDE.md contains multiple claude-chaperone marker blocks; "
                 "the 'exactly once' invariant is violated.",
@@ -820,11 +872,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
         had_conflict = True
     if had_conflict:
-        print(
-            "\nRe-run with --force to overwrite / re-sync, or revert the local "
-            "changes and re-run.",
-            file=sys.stderr,
-        )
+        claude_reason = claude_plan.get("conflict_reason")
+        if claude_reason != "unterminated" or copy_conflicts:
+            print(
+                "\nRe-run with --force to overwrite / re-sync, or revert the local "
+                "changes and re-run.",
+                file=sys.stderr,
+            )
         return 1
 
     # Phase 3: apply. Past this point, no user-recoverable error should abort.
@@ -838,7 +892,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         test_result = run_tests(target)
 
     print_summary(
-        target, copy_report, settings_report, claude_status, claude_line, test_result
+        target, copy_report, settings_report, claude_status, claude_line,
+        claude_plan.get("match_count"), test_result,
     )
     return 0
 
@@ -849,6 +904,7 @@ def print_summary(
     settings_report: List[Tuple[str, str]],
     claude_status: str,
     claude_line: Optional[int],
+    claude_match_count: Optional[int],
     test_result: Optional[Tuple[bool, str]],
 ) -> None:
     w = 5  # bracket inner width — produces "[  new]", "[ same]", "[ over]".
@@ -883,6 +939,11 @@ def print_summary(
     elif claude_status == "resync":
         print(
             f"  [{'sync':>{w}}] marker block version re-synced at line {claude_line}"
+        )
+    elif claude_status == "replace-multi":
+        n = claude_match_count or 0
+        print(
+            f"  [{'over':>{w}}] {n} marker blocks consolidated into one at line {claude_line}  (--force)"
         )
     elif claude_status == "replace":
         print(
