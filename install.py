@@ -39,6 +39,7 @@ __version__ = "0.1.0"
 COMMANDS: List[str] = [
     ".claude/commands/build.md",
     ".claude/commands/build-audit.md",
+    ".claude/commands/chaperone.md",
     ".claude/commands/execute.md",
     ".claude/commands/handoff.md",
     ".claude/commands/meta-prompt.md",
@@ -909,7 +910,7 @@ def print_summary(
 
     print("Next:")
     print(f"  Open a fresh Claude Code session in {target}")
-    print('  Run: /meta-prompt "rough idea of what you want to build"')
+    print('  Run: /chaperone "rough idea of what you want to build"')
 
 
 if __name__ == "__main__":

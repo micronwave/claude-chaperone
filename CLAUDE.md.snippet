@@ -2,12 +2,15 @@
 
 ## Build Workflow
 
-This project uses [`claude-chaperone`](https://github.com/micronwave/claude-chaperone) for any non-trivial, multi-phase work. The workflow is in `.claude/skills/full-build-workflow/SKILL.md` and auto-triggers when you mention: "new feature", "build phase", "start phase", "audit", "handoff", or "wrap up".
+This project uses [`claude-chaperone`](https://github.com/micronwave/claude-chaperone) for any non-trivial, multi-phase work. The workflow is in `.claude/skills/full-build-workflow/SKILL.md` and auto-triggers when you mention: "new feature", "build phase", "start phase", "audit", "handoff", "wrap up", or when you run `/chaperone`.
 
 **Manual entry points (slash commands):**
 
+The fastest entry is `/chaperone` — with an idea as argument it kicks off the workflow, without arguments it shows current state + next command. Use the individual commands below if you want to drive manually.
+
 | Command | Purpose |
 |---|---|
+| `/chaperone` | Entry point — with args kicks off `/meta-prompt`; without args shows state + next command |
 | `/meta-prompt` | Expand a rough idea into a detailed requirements spec with ambiguities surfaced |
 | `/plan` | Generate comprehensive plan file from meta-prompt |
 | `/plan-audit` | Comprehensive audit of the plan file (feasibility, scope, testability) |

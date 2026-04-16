@@ -17,6 +17,8 @@ Trigger this skill whenever the user says anything like:
 - "Write a handoff" / "hand this off"
 - "Wrap up this phase" / "commit and wrap"
 
+Also triggered explicitly when the user runs `/chaperone` — behave as the command file instructs.
+
 Do **not** trigger for small one-off tweaks (fixing a typo, renaming a variable, reading a file). Those don't need the full workflow.
 
 ## Core principles (never violate)
@@ -33,6 +35,7 @@ Do **not** trigger for small one-off tweaks (fixing a typo, renaming a variable,
 
 | # | Command | Actor | Clears after? | Notes |
 |---|---|---|---|---|
+| 0 | `/chaperone` | User (optional) | No (router, not a stage) | Entry point. With args → paste `/meta-prompt`. Without args → show state + next command. Never auto-executes. |
 | 1 | `/meta-prompt` | Claude | Yes | Produces `plan/meta.md` + ambiguity register |
 | — | (ambiguity gate) | User | — | User resolves ambiguities before proceeding |
 | 2 | `/plan` | Claude | Yes | Produces `plan/plan.md` |

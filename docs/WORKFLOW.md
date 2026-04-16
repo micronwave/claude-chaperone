@@ -4,6 +4,19 @@ Full detail on each phase, each gate, and the rationale behind the design.
 
 ---
 
+## Phase 0.0 — (optional) `/chaperone`
+
+A router command, not a workflow stage. Two behaviors:
+
+1. With arguments: `/chaperone "rough idea"` → user is told to paste `/meta-prompt "rough idea"`. The workflow proceeds normally from Step 0.1.
+2. Without arguments: prints a state snapshot (current phase, last BUILD_LOG header, suggested next command) OR, if no workflow is active, prints a short orientation + offer.
+
+Why separate from `/meta-prompt`? Discoverability. New users don't know what "meta-prompt" means. Returning users don't always remember which of the 12 commands is next. `/chaperone` is one memorable name for both entry and resume.
+
+Does NOT auto-execute anything. The user pastes the suggested command. Preserves the `/clear`-between-stages invariant.
+
+---
+
 ## Phase 0 — Intake
 
 ### Step 0.1 — Initial prompt (user)

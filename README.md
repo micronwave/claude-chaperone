@@ -31,7 +31,7 @@ This repo has an answer for each.
 
 ## What's in it
 
-**Twelve slash commands**, one per stage. You `/clear` between them so each runs in a fresh context:
+**Twelve slash commands**, one per stage. You `/clear` between them so each runs in a fresh context *(plus an optional `/chaperone` entry-point router — not shown)*:
 
 ```
 /meta-prompt  →  /plan  →  /plan-audit  →  /split-phases  →  /phase-audit
@@ -82,8 +82,10 @@ cp -r claude-chaperone/.claude your-project/
 cd your-project && python .claude/hooks/test_hooks.py
 
 # 5. Start a fresh Claude Code session
-/meta-prompt "rough idea of what you want to build"
+/chaperone "rough idea of what you want to build"
 ```
+
+`/chaperone` is the single memorable entry point. With an idea it launches the workflow; without arguments it reports where you are and what to run next.
 
 ---
 
@@ -125,6 +127,8 @@ The skill auto-triggers on phrases like "new feature", "build phase", "audit", o
 
 Each command ends by telling you the exact next one to run, so in practice it's one keystroke per gate.
 
+> **Lost mid-workflow?** Run `/chaperone` with no arguments. It reads `plan/current_phase.txt`, shows your current state, and tells you the next command to run. It's deliberately a read-only router — it never auto-advances.
+
 > [!IMPORTANT]
 > Don't skip the `/clear` calls. They wipe Claude's memory of the last stage so the next one runs in a fresh context. This is the single biggest quality mechanism in the workflow.
 
@@ -163,6 +167,8 @@ Next: `/clear`, then `/plan-audit`.
 ## Flow
 
 Every stage transition runs `/clear` first to drop stale context — omitted from the diagram for readability.
+
+*(`/chaperone` is an optional entry point — not shown.)*
 
 ```mermaid
 flowchart TD
@@ -213,7 +219,7 @@ claude-chaperone/
     │   └── references/
     │       ├── templates/         ← plan, handoff, audit_fix, build_log
     │       └── prompts/           ← reusable prompt fragments
-    ├── commands/                  ← the 12 slash commands
+    ├── commands/                  ← the 12 workflow commands + /chaperone router
     └── hooks/                     ← scope-drift, push-confirm, log-nag, session-start
 ```
 
