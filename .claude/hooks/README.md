@@ -33,7 +33,7 @@ Run the self-test suite:
 python .claude/hooks/test_hooks.py
 ```
 
-Expected output: `Ran 40 tests in ...s` followed by `OK`. Any failure indicates a broken install.
+Expected output: `Ran 43 tests in ...s` followed by `OK`. Any failure indicates a broken install.
 
 ### Manual smoke test
 

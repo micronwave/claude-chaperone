@@ -10,7 +10,7 @@ A folder you copy into a project to force Claude Code through a structured build
 **Claude** does the mechanical work, test-first, inside a declared scope, with the diff audited before you see it.
 
 > [!NOTE]
-> Dormant unless `plan/current_phase.txt` exists in the project. Dropping the folder into a repo changes nothing until you actually start a phase.
+> Dormant unless the workflow is active (`plan/current_phase.txt` exists, or pre-phase plan files are present without a `plan/workflow_complete.txt` marker). Dropping the folder into a repo changes nothing until you actually start a workflow.
 
 ---
 
@@ -79,7 +79,7 @@ git clone https://github.com/micronwave/claude-chaperone.git
 python claude-chaperone/install.py --target /path/to/your-project
 ```
 
-The installer merges `settings.json` without clobbering existing hooks, appends a marker block to `CLAUDE.md`, copies commands / hooks / skill files, and runs the 40-test hook suite to verify. Idempotent — re-run to re-sync. `--force` overwrites chaperone-owned files if you've edited them locally.
+The installer merges `settings.json` without clobbering existing hooks, appends a marker block to `CLAUDE.md`, copies commands / hooks / skill files, and runs the 43-test hook suite to verify. Idempotent — safe to re-run (validates existing installs without clobbering). Use `--force` to overwrite divergent chaperone-owned files when upgrading.
 
 Then, in a fresh Claude Code session inside your project:
 
@@ -110,7 +110,7 @@ cp claude-chaperone/settings.json your-project/.claude/settings.json
 
 # 4. Paste CLAUDE.md.snippet into your project's CLAUDE.md
 
-# 5. Verify hooks (40 tests, stdlib only)
+# 5. Verify hooks (43 tests, stdlib only)
 cd your-project && python .claude/hooks/test_hooks.py
 ```
 

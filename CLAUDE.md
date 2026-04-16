@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-- **Run the hook test suite:** `python .claude/hooks/test_hooks.py` — 40 unit + integration tests. Must be green before shipping any hook change. There is no other test suite, build step, or lint command in this repo.
+- **Run the hook test suite:** `python .claude/hooks/test_hooks.py` — 43 unit + integration tests. Must be green before shipping any hook change. There is no other test suite, build step, or lint command in this repo.
 - **Smoke-test hooks end-to-end:** see the fixture recipe in `.claude/hooks/README.md` (create `plan/current_phase.txt` + `plan/phase_1_scope.json`, trigger each hook).
 
 ## Architecture
@@ -25,7 +25,7 @@ Three cooperating layers. Understanding how they interact is essential before ed
    - `build_log_reminder.py` (UserPromptSubmit) → structured `additionalContext` JSON injecting a reminder when code changes outlast `BUILD_LOG.md`.
    - `session_start.py` (SessionStart) → structured `additionalContext` JSON injecting a workflow-state snapshot on session start / resume / post-`/clear`, so Claude re-orients without the user re-briefing.
 
-   The three enforcement hooks gate on `plan/current_phase.txt` — if the pointer is missing, they exit silently. `session_start.py` additionally fires when any pre-phase marker (`plan/meta.md` / `plan.md` / `plan_audit.md` / `phase_1.md`) exists, and is silent otherwise. Either way, the plugin imposes zero friction on projects where the workflow isn't active.
+   The three enforcement hooks gate on `plan/current_phase.txt` — if the pointer is missing, they exit silently. `session_start.py` additionally fires when any pre-phase marker (`plan/meta.md` / `plan.md` / `plan_audit.md` / `phase_1.md`) exists, unless `plan/workflow_complete.txt` is present (written by `/wrap` on the final phase to prevent stale snapshots after a completed workflow; deleted by `/meta-prompt` when a new workflow begins). Either way, the plugin imposes zero friction on projects where the workflow isn't active.
 
 3. **Skill** (`.claude/skills/full-build-workflow/`) — `SKILL.md` orchestrates the whole sequence and auto-triggers on keywords ("new feature", "build phase", "audit", "handoff", "wrap up"). `references/templates/` and `references/prompts/` contain the reusable artifacts the commands emit or consume (`plan.md`, `handoff.md`, `audit_fix.md`, `build_log.md`, `phase_scope.json`, `SCOPE_SCHEMA.md`).
 

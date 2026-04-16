@@ -718,7 +718,45 @@ class SessionStartHookTests(unittest.TestCase):
         # Stage heuristic should still fire for "phases split".
         self.assertIn("phases split", ctx)
 
-    # -- 12. Exception in main loop doesn't crash ----------------------------
+    # -- 12. workflow_complete.txt suppresses snapshot after completed workflow
+    def test_silent_after_workflow_complete(self) -> None:
+        # Simulate a completed workflow: plan artifacts remain but
+        # current_phase.txt is gone and workflow_complete.txt is present.
+        (self.tmp / "plan" / "meta.md").write_text("# Meta\n", encoding="utf-8")
+        (self.tmp / "plan" / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        (self.tmp / "plan" / "phase_1.md").write_text("# Phase 1\n", encoding="utf-8")
+        (self.tmp / "plan" / "workflow_complete.txt").write_text(
+            "done", encoding="utf-8"
+        )
+        # current_phase.txt intentionally absent.
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertEqual(result.stdout.strip(), "")
+
+    # -- 12b. workflow_complete.txt does NOT suppress when current_phase.txt exists
+    def test_active_phase_overrides_workflow_complete(self) -> None:
+        # If someone restarts without deleting workflow_complete.txt but sets
+        # current_phase.txt, the hook should still fire.
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        self._write_scope(1)
+        (self.tmp / "plan" / "workflow_complete.txt").write_text(
+            "done", encoding="utf-8"
+        )
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        ctx = self._parse_context(result.stdout)
+        self.assertIn("Active phase: 1", ctx)
+
+    # -- 12c. Removing workflow_complete.txt reactivates pre-phase snapshots
+    def test_pre_phase_reactivates_after_complete_removed(self) -> None:
+        (self.tmp / "plan" / "meta.md").write_text("# Meta\n", encoding="utf-8")
+        # No workflow_complete.txt, no current_phase.txt — new workflow starting.
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        ctx = self._parse_context(result.stdout)
+        self.assertIn("meta-prompt written", ctx)
+
+    # -- 13. Exception in main loop doesn't crash ----------------------------
     def test_crash_exits_zero(self) -> None:
         # Write a payload that would crash if stdin read failed, plus an
         # unreadable plan/ by making it a symlink to nowhere — skip on

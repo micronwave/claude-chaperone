@@ -123,7 +123,7 @@ State file: `plan/.build_log_reminder_state` — single-line cache of `BUILD_LOG
 
 On every session start — new session, `claude --resume`, and after every `/clear` — reads workflow state from `plan/` and `BUILD_LOG.md`. Emits a structured `additionalContext` injection via stdout so Claude's first turn sees the current phase number, phase name (from `plan/phase_<N>_scope.json`), last `## ` header in `BUILD_LOG.md`, artifact inventory (by mtime), re-audit loop counter, escalation flag, and a suggested next slash command.
 
-Silent when `plan/` has no workflow markers (no `current_phase.txt`, no `meta.md` / `plan.md` / `plan_audit.md` / `phase_1.md`) — consistent with every other chaperone hook.
+Silent when `plan/` has no workflow markers (no `current_phase.txt`, no `meta.md` / `plan.md` / `plan_audit.md` / `phase_1.md`) — consistent with every other chaperone hook. Also silent when `plan/workflow_complete.txt` exists without `current_phase.txt`, indicating a completed workflow whose leftover plan artifacts should not reactivate the snapshot. `/wrap` writes this marker on the final phase; `/meta-prompt` deletes it when starting a new workflow.
 
 Non-blocking: any exception is caught and mapped to exit 0. A broken session-start hook must never prevent a session from starting.
 
@@ -141,10 +141,10 @@ Stage heuristic: maps filesystem state to a short string like `"mid-build for ph
 
 | Condition | Effect |
 |---|---|
-| `plan/current_phase.txt` missing | `scope_drift_check.py`, `push_confirm.py`, and `build_log_reminder.py` silent. `session_start.py` is also silent unless a pre-phase marker (`plan/meta.md` / `plan.md` / `plan_audit.md` / `phase_1.md`) exists — in which case it emits a pre-phase snapshot. |
+| `plan/current_phase.txt` missing | `scope_drift_check.py`, `push_confirm.py`, and `build_log_reminder.py` silent. `session_start.py` is also silent unless a pre-phase marker (`plan/meta.md` / `plan.md` / `plan_audit.md` / `phase_1.md`) exists without `plan/workflow_complete.txt` — in which case it emits a pre-phase snapshot. After a completed workflow (where `/wrap` wrote the completion marker), all hooks are dormant until `/meta-prompt` starts a new workflow. |
 | `plan/phase_<N>_scope.json` missing or malformed | `scope_drift_check.py` emits `SCOPE_DRIFT_HOOK_ERROR` to stderr. User sees it. Scope enforcement is OFF until fixed. **Deliberately loud.** |
 | Python not installed | Claude Code logs "hook error" and continues. Workflow becomes advisory — commands still work, guards go silent. User is responsible for noticing absent reminders. |
 | Git not available | `git_changed_paths()` returns empty list; hooks assume nothing changed and skip. (Rare — Claude Code requires git for most workflows.) |
 | Hook spec version mismatch | If Claude Code changes the stdin JSON schema, `push_confirm.py` and `build_log_reminder.py` may fail to parse fields. Both default to no-op in that case — safer than bad enforcement. `scope_drift_check.py` doesn't depend on payload fields, so it's unaffected. |
 
-Recommended post-install validation: run `python .claude/hooks/test_hooks.py`. All 40 tests should pass. Any failure indicates a broken install.
+Recommended post-install validation: run `python .claude/hooks/test_hooks.py`. All 43 tests should pass. Any failure indicates a broken install.

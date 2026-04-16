@@ -35,13 +35,23 @@ Write `plan/phase_<N>_handoff.md` using the template at `.claude/skills/full-bui
 Stage the phase's artifacts explicitly (never `git add -A`):
 
 ```
+# 1. Explicit files declared in scope.files
 git add <each file from plan/phase_<N>_scope.json scope.files>
+
+# 2. Prefix directories declared in scope.prefixes — captures files created
+#    under those prefixes (including untracked new files when
+#    allow_untracked_new is true)
+git add <each prefix directory from scope.prefixes>
+
+# 3. Workflow metadata
 git add BUILD_LOG.md
 git add plan/phase_<N>_handoff.md
 git add plan/phase_<N>_audit_fix.md
 git add plan/phase_<N>_scope.json
 git commit -m "<phase N>: <one-line goal>"
 ```
+
+For prefix directories: `git add <prefix>` stages all changed and new files under that path. This is necessary — `scope.files` alone does not cover files created under `scope.prefixes`.
 
 Commit message format: `phase <N>: <verb> <noun>` (e.g., `phase 3: add async queue for batch embeddings`).
 
@@ -50,7 +60,7 @@ Commit message format: `phase <N>: <verb> <noun>` (e.g., `phase 3: add async que
 ### 4. Advance phase pointer
 
 If there are more phases: write `plan/current_phase.txt` with `<N+1>`.
-If this was the last phase: delete `plan/current_phase.txt`.
+If this was the last phase: delete `plan/current_phase.txt` and write `plan/workflow_complete.txt` with contents `done` (this prevents the `session_start.py` hook from injecting stale snapshots into future sessions).
 
 ### 5. End message
 

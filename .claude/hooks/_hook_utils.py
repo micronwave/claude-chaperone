@@ -173,6 +173,7 @@ def universal_allowlist(phase_num: int) -> frozenset[str]:
         {
             "BUILD_LOG.md",
             "plan/current_phase.txt",
+            "plan/workflow_complete.txt",
             "plan/.build_log_reminder_state",
             f"plan/phase_{phase_num}_audit_fix.md",
             f"plan/phase_{phase_num}_handoff.md",

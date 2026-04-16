@@ -29,6 +29,7 @@ These paths are ALWAYS allowed and do not count as drift:
 
 - `BUILD_LOG.md`
 - `plan/current_phase.txt`
+- `plan/workflow_complete.txt`
 - `plan/phase_<N>_audit_fix.md`
 - `plan/phase_<N>_handoff.md`
 - `plan/phase_<N>_loop.txt`

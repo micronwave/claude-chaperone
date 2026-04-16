@@ -325,11 +325,18 @@ def _workflow_has_any_marker(phase: int | None, root: Path) -> bool:
 
     Emit when current_phase.txt is set OR any pre-phase plan/ marker exists.
     If neither — the plugin is just sitting dormant in the repo.
+
+    After a completed workflow, ``plan/workflow_complete.txt`` exists and
+    ``current_phase.txt`` does not.  In that state the hook stays silent so
+    leftover plan artifacts don't keep injecting a stale snapshot.
+    ``/meta-prompt`` deletes the marker when a new workflow begins.
     """
     if phase is not None:
         return True
     plan = root / "plan"
     if not plan.is_dir():
+        return False
+    if (plan / "workflow_complete.txt").exists():
         return False
     return any((plan / name).exists() for name in _PRE_PHASE_MARKERS)
 
