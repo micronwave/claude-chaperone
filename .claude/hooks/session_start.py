@@ -380,7 +380,10 @@ def main() -> int:
         loop_present, loop_val = _read_loop_counter(phase, root)
         escalation = (root / "plan" / f"phase_{phase}_escalation.md").exists()
 
-    entries = hu.git_changed_paths(root=root)
+    try:
+        entries = hu.git_changed_paths(root=root)
+    except hu.GitNotFoundError:
+        entries = []
     git_changed_count = len(entries)
 
     stage = _stage_heuristic(phase, root)

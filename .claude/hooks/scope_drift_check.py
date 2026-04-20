@@ -49,7 +49,16 @@ def main() -> int:
         )
         return 0  # non-blocking — do not prevent the edit, just surface the problem
 
-    entries = hu.git_changed_paths()
+    try:
+        entries = hu.git_changed_paths()
+    except hu.GitNotFoundError as exc:
+        hu.emit_stderr_warning(
+            f"SCOPE_DRIFT_HOOK_ERROR: {exc}\n"
+            f"  The scope-drift guard is not running for phase {phase}. "
+            f"Add git to PATH before continuing."
+        )
+        return 0
+
     if not entries:
         return 0
 

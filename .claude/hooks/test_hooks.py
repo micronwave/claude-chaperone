@@ -306,6 +306,37 @@ class HookScriptIntegrationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)  # non-blocking
         self.assertIn("MISSING_SCOPE_FILE", result.stderr)
 
+    def test_scope_drift_loud_when_git_missing(self) -> None:
+        # Phase active + valid scope, but git not on PATH → SCOPE_DRIFT_HOOK_ERROR
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        (self.tmp / "plan" / "phase_1_scope.json").write_text(
+            json.dumps({
+                "schema_version": 1,
+                "phase_number": 1,
+                "phase_name": "test phase",
+                "scope": {"files": [], "prefixes": []},
+            }),
+            encoding="utf-8",
+        )
+        no_git_env = {
+            **os.environ,
+            "CLAUDE_PROJECT_DIR": str(self.tmp),
+            "PATH": str(self.tmp),  # a dir that contains no git binary
+        }
+        result = subprocess.run(
+            [sys.executable, str(HOOKS_DIR / "scope_drift_check.py")],
+            input=json.dumps({"tool_name": "Edit", "tool_input": {"file_path": "foo.py"}}),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=no_git_env,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0)  # non-blocking
+        self.assertEqual(result.stdout.strip(), "")
+        self.assertIn("SCOPE_DRIFT_HOOK_ERROR", result.stderr)
+        self.assertIn("git", result.stderr.lower())
+
     def test_build_log_reminder_silent_when_workflow_inactive(self) -> None:
         # No plan/current_phase.txt → hook must be silent on every channel
         result = self._run_hook(

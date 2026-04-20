@@ -50,7 +50,10 @@ def main() -> int:
     if phase is None:
         return 0  # workflow inactive — no reminders
 
-    entries = hu.git_changed_paths()
+    try:
+        entries = hu.git_changed_paths()
+    except hu.GitNotFoundError:
+        entries = []
     if not entries:
         return 0
 

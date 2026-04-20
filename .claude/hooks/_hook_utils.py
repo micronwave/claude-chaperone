@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -206,23 +207,34 @@ class DiffEntry:
     path: str
 
 
+class GitNotFoundError(Exception):
+    """Raised when the git binary cannot be located on PATH."""
+
+
 def git_changed_paths(root: Path | None = None) -> list[DiffEntry]:
     """Return all changed paths (staged, unstaged, untracked).
 
     Uses `git status --porcelain=v1 -z` to avoid quoting edge cases.
-    Returns an empty list on any git failure — distinct from "no changes"
-    only at the level of log messages; both are treated as "nothing to check".
+    Raises GitNotFoundError if git is not on PATH — callers should surface
+    this as a loud hook error rather than silently passing scope validation.
+    Returns an empty list on timeout or non-zero exit (transient failures).
     """
     root = root or project_root()
+    git_bin = shutil.which("git")
+    if git_bin is None:
+        raise GitNotFoundError(
+            "git binary not found on PATH — scope-drift guard cannot run. "
+            "Ensure git is installed and on PATH."
+        )
     try:
         out = subprocess.run(
-            ["git", "status", "--porcelain=v1", "-z"],
+            [git_bin, "status", "--porcelain=v1", "-z"],
             capture_output=True,
             timeout=10,
             cwd=str(root),
             check=False,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except subprocess.TimeoutExpired:
         return []
     if out.returncode != 0:
         return []
