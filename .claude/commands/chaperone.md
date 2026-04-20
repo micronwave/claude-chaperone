@@ -13,7 +13,7 @@ Treat `$ARGUMENTS` of `""` (literal empty-string in quotes) as empty. Anything e
 
 If `$ARGUMENTS` is non-empty:
 
-- If `plan/current_phase.txt` exists, WARN the user: "A workflow is already in progress (Phase N). Starting a new one will not delete the existing plan files, but they will conflict. Either finish the current workflow (`/wrap`) first, or explicitly confirm you want to start over."
+- If `plan/current_phase.txt` exists, WARN the user: "A workflow is already in progress (Phase N). Starting a new one will archive the existing plan files to `plan/archive/<timestamp>/` automatically when `/meta-prompt` runs. Either finish the current workflow (`/wrap`) first, or confirm you want to start over."
 - Then (with or without confirmation — that's the user's call): instruct the user to paste `/meta-prompt "$ARGUMENTS"` to begin. Do NOT auto-execute `/meta-prompt`; the user pastes. This preserves the `/clear`-between-stages invariant (see `docs/WORKFLOW.md` Phase 0).
 
 End your response with:

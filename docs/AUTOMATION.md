@@ -123,7 +123,7 @@ State file: `plan/.build_log_reminder_state` — single-line cache of `BUILD_LOG
 
 On every session start — new session, `claude --resume`, and after every `/clear` — reads workflow state from `plan/` and `BUILD_LOG.md`. Emits a structured `additionalContext` injection via stdout so Claude's first turn sees the current phase number, phase name (from `plan/phase_<N>_scope.json`), last `## ` header in `BUILD_LOG.md`, artifact inventory (by mtime), re-audit loop counter, escalation flag, and a suggested next slash command.
 
-Silent when `plan/` has no workflow markers (no `current_phase.txt`, no `meta.md` / `plan.md` / `plan_audit.md` / `phase_1.md`) — consistent with every other chaperone hook. Also silent when `plan/workflow_complete.txt` exists without `current_phase.txt`, indicating a completed workflow whose leftover plan artifacts should not reactivate the snapshot. `/wrap` writes this marker on the final phase; `/meta-prompt` deletes it when starting a new workflow.
+Silent when `plan/` has no workflow markers (no `current_phase.txt`, no `meta.md` / `plan.md` / `plan_audit.md` / `phase_1.md`) — consistent with every other chaperone hook. Also silent when `plan/workflow_complete.txt` exists without `current_phase.txt`, indicating a completed workflow whose leftover plan artifacts should not reactivate the snapshot. `/wrap` writes this marker on the final phase; `/meta-prompt` removes it (by archiving all `plan/` files to `plan/archive/<timestamp>/`) when starting a new workflow.
 
 Non-blocking: any exception is caught and mapped to exit 0. A broken session-start hook must never prevent a session from starting.
 

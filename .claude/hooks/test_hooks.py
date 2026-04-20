@@ -838,6 +838,41 @@ class SessionStartHookTests(unittest.TestCase):
         # Stdout may be empty (payload read returns {}) or contain a valid
         # snapshot — both are acceptable. The contract is "never crash."
 
+    # -- 14. Archive subdir invisible to hook — no markers, stays silent ------
+    def test_archive_subdir_does_not_trigger_hook(self) -> None:
+        """Files inside plan/archive/<timestamp>/ must not activate the hook.
+
+        /meta-prompt moves prior workflow files there; those archived markers
+        must not cause a stale snapshot to be injected into the new workflow.
+        """
+        arc = self.tmp / "plan" / "archive" / "20260101T000000Z"
+        arc.mkdir(parents=True)
+        (arc / "meta.md").write_text("# Old meta\n", encoding="utf-8")
+        (arc / "phase_1.md").write_text("# Old phase 1\n", encoding="utf-8")
+        (arc / "workflow_complete.txt").write_text("done", encoding="utf-8")
+        # No markers directly in plan/ — hook should stay silent.
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertEqual(result.stdout.strip(), "",
+                         "archive subdir contents must not trigger the hook")
+
+    # -- 15. Archive subdir absent from active-phase artifact inventory -------
+    def test_archive_subdir_not_in_artifact_inventory(self) -> None:
+        """Archived phase files must not appear in the active-phase artifact list."""
+        (self.tmp / "plan" / "current_phase.txt").write_text("2", encoding="utf-8")
+        self._write_scope(2, name="new feature")
+        arc = self.tmp / "plan" / "archive" / "20260101T000000Z"
+        arc.mkdir(parents=True)
+        (arc / "phase_1.md").write_text("# Old Phase 1\n", encoding="utf-8")
+        (arc / "phase_1_handoff.md").write_text("# Old handoff\n", encoding="utf-8")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        ctx = self._parse_context(result.stdout)
+        self.assertNotIn("plan/archive", ctx,
+                         "archive path must not appear in snapshot")
+        self.assertNotIn("phase_1_handoff", ctx,
+                         "archived handoff must not appear in phase 2 inventory")
+
 
 def main() -> int:
     loader = unittest.TestLoader()
