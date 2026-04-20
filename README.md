@@ -9,9 +9,6 @@ A one-line install (`curl | python`) that drops a structured build flow into any
 **You** make the architecture calls, approve the plan, `/clear` between stages.
 **Claude** does the mechanical work, test-first, inside a declared scope, with the diff audited before you see it.
 
-> [!NOTE]
-> Dormant unless the workflow is active (`plan/current_phase.txt` exists, or pre-phase plan files are present without a `plan/workflow_complete.txt` marker). Dropping the folder into a repo changes nothing until you actually start a workflow.
-
 ---
 
 ## Why this exists
@@ -48,8 +45,7 @@ This repo has an answer for each.
 
 **One skill** that auto-triggers the whole sequence on phrases like "new feature", "build phase", "audit", or "wrap up".
 
-> [!NOTE]
-> After every `/clear`, the session-start hook auto-injects a snapshot (current phase, last `BUILD_LOG.md` entry, `plan/` artifact inventory, re-audit loop counter, suggested next command) into Claude's context. You don't need to re-brief after a clear — just paste the next slash command.
+After every `/clear`, the session-start hook re-orients Claude automatically — just paste the next command.
 
 ---
 
@@ -163,12 +159,7 @@ Each command ends by telling you the exact next one to run, so in practice it's 
 
 **What the hooks do in the background:** warn on scope drift at end of turn, require a click on `git push`, nag if `BUILD_LOG.md` falls behind the code, and inject the current workflow state after every `/clear` so Claude doesn't need re-briefing.
 
-<details>
-<summary><b>What a real session looks like</b></summary>
-
-<br>
-
-Abbreviated transcript of the first two stages for "add a dark mode toggle":
+**What a real session looks like** — abbreviated transcript, first two stages for "add a dark mode toggle":
 
 **You:** `/meta-prompt "add a dark mode toggle to the settings page"`
 
@@ -189,81 +180,16 @@ Plan written. Two phases:
 
 Next: `/clear`, then `/plan-audit`.
 
-</details>
-
 ---
-
-## Flow
-
-Every stage transition runs `/clear` first to drop stale context — omitted from the diagram for readability.
-
-*(`/chaperone` is an optional entry point — not shown.)*
-
-```mermaid
-flowchart TD
-    A[Initial prompt] --> B[/meta-prompt/]
-    B --> B2{"Ambiguities<br/>surfaced?"}
-    B2 -->|Yes| B3[User resolves]
-    B3 --> D[/plan/]
-    B2 -->|No| D
-    D --> F[/plan-audit/]
-    F --> F2{"User approves<br/>architecture?"}
-    F2 -->|No| D
-    F2 -->|Yes| H[/split-phases/]
-    H --> J[/phase-audit/]
-    J --> M[/"build<br/>tests first"/]
-    M --> M2{"Scope drift<br/>hook OK?"}
-    M2 -->|No| M3[User decides]
-    M3 --> O[/build-audit/]
-    M2 -->|Yes| O
-    O --> P[/execute/]
-    P --> R[/re-audit/]
-    R --> R2{Issues?}
-    R2 -->|"Yes, <3 loops"| P
-    R2 -->|"Yes, ≥3 loops"| R3[Escalate to user]
-    R3 --> S[/test/]
-    R2 -->|No| S
-    S --> S2{Pass?}
-    S2 -->|No| P
-    S2 -->|Yes| T[/"wrap<br/>log + commit"/]
-    T --> U{More phases?}
-    U -->|Yes| M
-    U -->|No| V[Done]
-```
-
-## Repo layout
-
-```
-claude-chaperone/
-├── README.md
-├── CLAUDE.md.snippet              ← paste into your project's CLAUDE.md
-├── settings.json                  ← hooks registration
-├── docs/
-│   ├── WORKFLOW.md                ← full rationale + gate definitions
-│   ├── AUTOMATION.md              ← what is and isn't automated, and why
-│   └── SECOND_OPINION.md          ← optional external-tool integration
-└── .claude/
-    ├── skills/full-build-workflow/
-    │   ├── SKILL.md               ← orchestration + keyword triggers
-    │   └── references/
-    │       ├── templates/         ← plan, handoff, audit_fix, build_log
-    │       └── prompts/           ← reusable prompt fragments
-    ├── commands/                  ← the 12 workflow commands + /chaperone router
-    └── hooks/                     ← scope-drift, push-confirm, log-nag, session-start
-```
 
 ## Rules
 
-1. A phase fits one session, or it gets split.
-2. `/clear` between every stage. Stale context is the #1 quality killer.
-3. State lives in handoff files, not conversation memory.
-4. Audits are scope-bounded, but within scope nothing gets sampled.
-5. Re-fix loops cap at 3. After that, the human gets pulled back in.
-6. You own architecture. Claude owns execution.
-7. `git push` always needs a human click. No auto-push, ever.
-8. Second-opinion tools (`codex`, `gemini`, `aider`) are welcome but optional. If none are on `PATH`, audits fall back to a fresh subagent.
+You own the architecture; Claude owns execution. `git push` always needs a human click — no auto-push, ever. Re-fix loops cap at 3, then you get pulled back in. Second-opinion tools (`codex`, `gemini`, `aider`) are optional; if none are on `PATH`, audits fall back to a fresh subagent.
 
-The reasoning behind each lives in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+The reasoning behind the full rule set lives in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+
+> [!NOTE]
+> Dormant unless the workflow is active (`plan/current_phase.txt` exists, or pre-phase plan files are present). Dropping the folder into a repo changes nothing until you start a workflow.
 
 ---
 
