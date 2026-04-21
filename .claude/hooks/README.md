@@ -11,7 +11,7 @@ Cross-platform Python hooks (Python 3.8+). Referenced from `../../settings.json`
 | `push_confirm.py` | PreToolUse (Bash) — emits structured `permissionDecision: "ask"` JSON when the Bash command contains `git push`, forcing a user confirmation prompt. |
 | `build_log_reminder.py` | UserPromptSubmit — injects a BUILD_LOG reminder into Claude's next turn (via structured `additionalContext` JSON) when code files changed without a log update. Also echoes to stderr for the human. Uses UserPromptSubmit rather than Stop so the reminder actually reaches the agent, not just the terminal. |
 | `session_start.py` | SessionStart (new session, resume, and after `/clear`) — injects a factual workflow-state snapshot (current phase, last BUILD_LOG entry, plan/ inventory, suggested next command) into Claude's context so the next turn picks up without the user re-briefing. Silent when plan/ has no workflow markers. |
-| `test_hooks.py` | Self-test suite — 40 unit + integration tests covering scope schema, path matching, git-push detection, and every hook script's payload handling + output shape. |
+| `test_hooks.py` | Self-test suite — 58 unit + integration tests covering scope schema, path matching, git-push detection, payload path extraction, and every hook script's payload handling + output shape. |
 
 ## Activation gate
 
@@ -33,7 +33,7 @@ Run the self-test suite:
 python .claude/hooks/test_hooks.py
 ```
 
-Expected output: `Ran 43 tests in ...s` followed by `OK`. Any failure indicates a broken install.
+Expected output: `Ran 58 tests in ...s` followed by `OK`. Any failure indicates a broken install.
 
 ### Manual smoke test
 

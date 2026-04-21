@@ -3,8 +3,9 @@
 scope_drift_check.py — PostToolUse hook for Edit / Write / NotebookEdit.
 
 Reads the active phase from plan/current_phase.txt and the scope contract
-from plan/phase_<N>_scope.json, then compares against `git status --porcelain`.
-Emits a structured warning to stderr for any file outside the declared scope.
+from plan/phase_<N>_scope.json, then checks whether the edited file is in
+scope. Fast path: uses the file_path from the hook payload (no subprocess).
+Fallback: runs `git status --porcelain` when no path is in the payload.
 
 Failure modes are LOUD — missing scope file, malformed JSON, or schema
 violations produce a visible error instead of silently passing every file as
@@ -28,27 +29,42 @@ import _hook_utils as hu  # noqa: E402
 
 
 def main() -> int:
-    # Drain stdin even if we don't use the payload — avoids SIGPIPE on the
-    # producer side on some platforms.
-    _ = hu.read_hook_payload()
+    payload = hu.read_hook_payload()
 
     phase = hu.read_current_phase()
     if phase is None:
-        # Workflow not active — silent, no enforcement
         return 0
 
     try:
         scope = hu.load_phase_scope(phase)
     except hu.ScopeError as exc:
-        # LOUD: config error, surface it so the user fixes the scope file
         hu.emit_stderr_warning(
             f"SCOPE_DRIFT_HOOK_ERROR: {exc}\n"
             f"  The scope-drift guard is not running for phase {phase}. "
             f"Fix the scope file before continuing.\n"
             f"  See .claude/skills/full-build-workflow/references/templates/SCOPE_SCHEMA.md"
         )
-        return 0  # non-blocking — do not prevent the edit, just surface the problem
+        return 0
 
+    # Fast path: payload contains the exact file just edited — no subprocess needed.
+    file_path = hu.payload_file_path(payload)
+    if file_path is not None:
+        if not hu.path_in_scope(file_path, scope, phase):
+            hu.emit_stderr_warning(
+                f"SCOPE_DRIFT: file changed outside Phase {phase} ({scope.phase_name}) "
+                f"declared scope:\n"
+                f"  [M] {file_path}\n"
+                "Decide: "
+                "(a) accept drift — update plan/phase_{n}_scope.json to include this path, "
+                "(b) revert the change, "
+                "(c) amend and continue with an explicit justification in BUILD_LOG.".format(
+                    n=phase
+                )
+            )
+        return 0
+
+    # Fallback path: no file_path in payload (unexpected payload shape).
+    # Run git status to catch any accumulated drift.
     try:
         entries = hu.git_changed_paths()
     except hu.GitNotFoundError as exc:
@@ -65,7 +81,6 @@ def main() -> int:
     drifted: list[hu.DiffEntry] = []
     for entry in entries:
         if entry.status == "??" and scope.allow_untracked_new:
-            # Untracked new files — allowed if they fall under a prefix
             if any(entry.path.startswith(p) for p in scope.prefixes):
                 continue
         if hu.path_in_scope(entry.path, scope, phase):
@@ -87,7 +102,7 @@ def main() -> int:
         "(c) amend and continue with an explicit justification in BUILD_LOG.".format(n=phase)
     )
     hu.emit_stderr_warning("\n".join(lines))
-    return 0  # non-blocking — user decides resolution
+    return 0
 
 
 if __name__ == "__main__":

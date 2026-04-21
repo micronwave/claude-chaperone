@@ -75,7 +75,7 @@ git clone https://github.com/micronwave/claude-chaperone.git
 python claude-chaperone/install.py --target /path/to/your-project
 ```
 
-The installer merges `settings.json` without clobbering existing hooks, appends a marker block to `CLAUDE.md`, copies commands / hooks / skill files, and runs the 43-test hook suite to verify. Idempotent — safe to re-run (validates existing installs without clobbering). Use `--force` to overwrite divergent chaperone-owned files when upgrading.
+The installer merges `settings.json` without clobbering existing hooks, appends a marker block to `CLAUDE.md`, copies commands / hooks / skill files, and runs the 58-test hook suite to verify. Idempotent — safe to re-run (validates existing installs without clobbering). Use `--force` to overwrite divergent chaperone-owned files when upgrading.
 
 Then, in a fresh Claude Code session inside your project:
 
@@ -106,7 +106,7 @@ cp claude-chaperone/settings.json your-project/.claude/settings.json
 
 # 4. Paste CLAUDE.md.snippet into your project's CLAUDE.md
 
-# 5. Verify hooks (43 tests, stdlib only)
+# 5. Verify hooks (58 tests, stdlib only)
 cd your-project && python .claude/hooks/test_hooks.py
 ```
 

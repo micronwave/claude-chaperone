@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-- **Run the hook test suite:** `python .claude/hooks/test_hooks.py` — 43 unit + integration tests. Must be green before shipping any hook change. There is no other test suite, build step, or lint command in this repo.
+- **Run the hook test suite:** `python .claude/hooks/test_hooks.py` — 58 unit + integration tests. Must be green before shipping any hook change. There is no other test suite, build step, or lint command in this repo.
 - **Smoke-test hooks end-to-end:** see the fixture recipe in `.claude/hooks/README.md` (create `plan/current_phase.txt` + `plan/phase_1_scope.json`, trigger each hook).
 
 ## Architecture

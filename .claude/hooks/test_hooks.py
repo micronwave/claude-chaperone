@@ -224,6 +224,71 @@ class GitPushDetectionTests(unittest.TestCase):
                 )
 
 
+class PayloadFilePathTests(unittest.TestCase):
+    """Unit tests for hu.payload_file_path()."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="cbw_test_"))
+        self._orig_env = os.environ.get("CLAUDE_PROJECT_DIR")
+        os.environ["CLAUDE_PROJECT_DIR"] = str(self.tmp)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        if self._orig_env is None:
+            os.environ.pop("CLAUDE_PROJECT_DIR", None)
+        else:
+            os.environ["CLAUDE_PROJECT_DIR"] = self._orig_env
+
+    def test_relative_path_returned_as_is(self) -> None:
+        result = hu.payload_file_path({"tool_input": {"file_path": "api/auth.py"}}, self.tmp)
+        self.assertEqual(result, "api/auth.py")
+
+    def test_dot_slash_stripped(self) -> None:
+        result = hu.payload_file_path({"tool_input": {"file_path": "./api/auth.py"}}, self.tmp)
+        self.assertEqual(result, "api/auth.py")
+
+    def test_backslash_normalized(self) -> None:
+        result = hu.payload_file_path({"tool_input": {"file_path": "api\\auth.py"}}, self.tmp)
+        self.assertEqual(result, "api/auth.py")
+
+    def test_absolute_in_root_stripped(self) -> None:
+        abs_path = (self.tmp / "api" / "auth.py").as_posix()
+        result = hu.payload_file_path({"tool_input": {"file_path": abs_path}}, self.tmp)
+        self.assertEqual(result, "api/auth.py")
+
+    def test_absolute_in_root_case_insensitive(self) -> None:
+        # Windows drive-letter paths are case-insensitive; root stripping must ignore case.
+        # Use a synthetic Windows-style root so this exercises the Windows code path on
+        # all platforms without misclassifying POSIX paths on case-sensitive filesystems.
+        fake_root = Path("C:/projects/myrepo")
+        result = hu.payload_file_path(
+            {"tool_input": {"file_path": "C:/PROJECTS/MYREPO/api/auth.py"}},
+            fake_root,
+        )
+        self.assertEqual(result, "api/auth.py")
+
+    def test_absolute_out_of_root_returned_raw(self) -> None:
+        # Out-of-root absolute path must NOT return None — returning None would silently
+        # fall back to git, which cannot see files outside the repo. Return the path
+        # so the caller can still check it against scope and emit a drift warning.
+        result = hu.payload_file_path(
+            {"tool_input": {"file_path": "/some/other/project/file.py"}}, self.tmp
+        )
+        self.assertIsNotNone(result)
+        self.assertIn("other/project/file.py", result)
+
+    def test_notebook_path_field(self) -> None:
+        result = hu.payload_file_path(
+            {"tool_input": {"notebook_path": "notebooks/nb.ipynb"}}, self.tmp
+        )
+        self.assertEqual(result, "notebooks/nb.ipynb")
+
+    def test_empty_returns_none(self) -> None:
+        self.assertIsNone(hu.payload_file_path({"tool_input": {}}, self.tmp))
+        self.assertIsNone(hu.payload_file_path({"tool_input": {"file_path": ""}}, self.tmp))
+        self.assertIsNone(hu.payload_file_path({"tool_input": {"file_path": "   "}}, self.tmp))
+
+
 class HookScriptIntegrationTests(unittest.TestCase):
     """Run the actual hook scripts as subprocesses with a test payload."""
 
@@ -307,7 +372,8 @@ class HookScriptIntegrationTests(unittest.TestCase):
         self.assertIn("MISSING_SCOPE_FILE", result.stderr)
 
     def test_scope_drift_loud_when_git_missing(self) -> None:
-        # Phase active + valid scope, but git not on PATH → SCOPE_DRIFT_HOOK_ERROR
+        # Phase active + valid scope, payload has NO file_path → triggers git fallback.
+        # With git not on PATH the fallback must emit SCOPE_DRIFT_HOOK_ERROR.
         (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
         (self.tmp / "plan" / "phase_1_scope.json").write_text(
             json.dumps({
@@ -321,21 +387,101 @@ class HookScriptIntegrationTests(unittest.TestCase):
         no_git_env = {
             **os.environ,
             "CLAUDE_PROJECT_DIR": str(self.tmp),
-            "PATH": str(self.tmp),  # a dir that contains no git binary
+            "PATH": str(self.tmp),  # dir with no git binary
         }
         result = subprocess.run(
             [sys.executable, str(HOOKS_DIR / "scope_drift_check.py")],
-            input=json.dumps({"tool_name": "Edit", "tool_input": {"file_path": "foo.py"}}),
+            input=json.dumps({"tool_name": "Edit", "tool_input": {}}),  # no file_path
             capture_output=True,
             text=True,
             timeout=10,
             env=no_git_env,
             check=False,
         )
-        self.assertEqual(result.returncode, 0)  # non-blocking
+        self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.strip(), "")
         self.assertIn("SCOPE_DRIFT_HOOK_ERROR", result.stderr)
         self.assertIn("git", result.stderr.lower())
+
+    def test_scope_drift_warns_out_of_scope_via_payload(self) -> None:
+        # Phase active, scope only allows api/auth.py. Editing src/other.py → drift.
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        (self.tmp / "plan" / "phase_1_scope.json").write_text(
+            json.dumps({
+                "schema_version": 1,
+                "phase_number": 1,
+                "phase_name": "auth",
+                "scope": {"files": ["api/auth.py"], "prefixes": []},
+            }),
+            encoding="utf-8",
+        )
+        result = self._run_hook(
+            "scope_drift_check.py",
+            {"tool_name": "Edit", "tool_input": {"file_path": "src/other.py"}},
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("SCOPE_DRIFT", result.stderr)
+        self.assertIn("src/other.py", result.stderr)
+        # Must NOT attempt git (no git repo in tmp) — no git error in output.
+        self.assertNotIn("SCOPE_DRIFT_HOOK_ERROR", result.stderr)
+
+    def test_scope_drift_silent_in_scope_via_payload(self) -> None:
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        (self.tmp / "plan" / "phase_1_scope.json").write_text(
+            json.dumps({
+                "schema_version": 1,
+                "phase_number": 1,
+                "phase_name": "auth",
+                "scope": {"files": ["api/auth.py"], "prefixes": []},
+            }),
+            encoding="utf-8",
+        )
+        result = self._run_hook(
+            "scope_drift_check.py",
+            {"tool_name": "Edit", "tool_input": {"file_path": "api/auth.py"}},
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stderr.strip(), "")
+
+    def test_scope_drift_silent_universal_allowlist_via_payload(self) -> None:
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        (self.tmp / "plan" / "phase_1_scope.json").write_text(
+            json.dumps({
+                "schema_version": 1,
+                "phase_number": 1,
+                "phase_name": "auth",
+                "scope": {"files": [], "prefixes": []},
+            }),
+            encoding="utf-8",
+        )
+        result = self._run_hook(
+            "scope_drift_check.py",
+            {"tool_name": "Edit", "tool_input": {"file_path": "BUILD_LOG.md"}},
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stderr.strip(), "")
+
+    def test_scope_drift_warns_absolute_out_of_root_via_payload(self) -> None:
+        # An absolute path outside project root must emit SCOPE_DRIFT, not silently pass.
+        # Returning None from payload_file_path would fall back to git (which cannot
+        # see out-of-repo files), potentially missing the drift entirely.
+        (self.tmp / "plan" / "current_phase.txt").write_text("1", encoding="utf-8")
+        (self.tmp / "plan" / "phase_1_scope.json").write_text(
+            json.dumps({
+                "schema_version": 1,
+                "phase_number": 1,
+                "phase_name": "auth",
+                "scope": {"files": ["api/auth.py"], "prefixes": []},
+            }),
+            encoding="utf-8",
+        )
+        result = self._run_hook(
+            "scope_drift_check.py",
+            {"tool_name": "Edit", "tool_input": {"file_path": "/some/other/project/file.py"}},
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("SCOPE_DRIFT", result.stderr)
+        self.assertNotIn("SCOPE_DRIFT_HOOK_ERROR", result.stderr)
 
     def test_build_log_reminder_silent_when_workflow_inactive(self) -> None:
         # No plan/current_phase.txt → hook must be silent on every channel
@@ -881,6 +1027,7 @@ def main() -> int:
         ScopeParsingTests,
         PathMatchingTests,
         GitPushDetectionTests,
+        PayloadFilePathTests,
         HookScriptIntegrationTests,
         BuildLogReminderOutputShapeTests,
         BuildLogReminderDebounceTests,

@@ -293,6 +293,52 @@ def get_tool_input(payload: dict[str, Any]) -> dict[str, Any]:
     return ti if isinstance(ti, dict) else {}
 
 
+def payload_file_path(payload: dict[str, Any], root: Path | None = None) -> str | None:
+    """Extract and normalize the edited file path from a hook payload.
+
+    Checks tool_input.file_path first, then tool_input.notebook_path (NotebookEdit).
+    Returns a repo-relative forward-slash path when the file is inside the project
+    root, the normalized absolute path when outside (always out-of-scope — callers
+    should treat it as drift), or None when the field is absent or empty.
+
+    Handles absolute paths (Windows C:/... and Unix /...) and relative paths.
+    Root comparison is case-insensitive to handle Windows drive-letter casing.
+    """
+    ti = get_tool_input(payload)
+    raw = ti.get("file_path") or ti.get("notebook_path")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    p = raw.replace("\\", "/").strip()
+    if p.startswith("./"):
+        p = p[2:]
+    if not p:
+        return None
+    # Absolute path: strip the project root prefix to get a repo-relative path.
+    # Handles Unix (/home/user/...) and Windows (C:/Users/...) forms after
+    # backslash normalisation above. Case-insensitive comparison handles Windows
+    # drive-letter casing differences (C:/ vs c:/).
+    is_windows_drive = len(p) > 2 and p[1] == ":" and p[2] == "/"
+    is_absolute = p.startswith("/") or is_windows_drive
+    if is_absolute:
+        r = (root or project_root()).as_posix()
+        if not r.endswith("/"):
+            r += "/"
+        # Windows drive-letter paths are case-insensitive; POSIX paths are
+        # case-sensitive. Applying lowercase to POSIX paths would misclassify
+        # /TMP/repo as inside /tmp/repo on case-sensitive filesystems.
+        if is_windows_drive:
+            matched = p.lower().startswith(r.lower())
+        else:
+            matched = p.startswith(r)
+        if matched:
+            p = p[len(r):]
+        # else: path is outside project root — return as-is so the caller can
+        # still check it against scope and emit a drift warning. An absolute path
+        # outside the repo is never in scope; returning None here would silently
+        # hand off to the git fallback, which cannot see out-of-repo files.
+    return p if p else None
+
+
 def get_tool_name(payload: dict[str, Any]) -> str:
     tn = payload.get("tool_name")
     return tn if isinstance(tn, str) else ""

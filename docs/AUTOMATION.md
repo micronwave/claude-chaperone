@@ -50,7 +50,11 @@ These happen without any user intervention beyond kicking off the command.
 
 ### `scope_drift_check.py` (PostToolUse on Edit/Write/NotebookEdit)
 
-Reads `plan/current_phase.txt` to get the active phase number N, then loads `plan/phase_<N>_scope.json` using the strict schema defined at `.claude/skills/full-build-workflow/references/templates/SCOPE_SCHEMA.md`. Runs `git status --porcelain=v1 -z` to enumerate every changed path. For each path, checks:
+Reads `plan/current_phase.txt` to get the active phase number N, then loads `plan/phase_<N>_scope.json` using the strict schema defined at `.claude/skills/full-build-workflow/references/templates/SCOPE_SCHEMA.md`.
+
+**Fast path (normal operation):** extracts `tool_input.file_path` (or `tool_input.notebook_path` for NotebookEdit) from the hook payload and checks only that one file against the scope. No subprocess spawned.
+
+**Fallback path:** when no file path is in the payload, runs `git status --porcelain=v1 -z` to enumerate every changed path. For each path, checks:
 
 1. Is it in the universal allowlist (BUILD_LOG.md, plan/phase_<N>_* files, plan/.build_log_reminder_state)? → in scope
 2. Does it match an exact entry in `scope.files`? → in scope
@@ -147,4 +151,4 @@ Stage heuristic: maps filesystem state to a short string like `"mid-build for ph
 | Git not available | `git_changed_paths()` returns empty list; hooks assume nothing changed and skip. (Rare — Claude Code requires git for most workflows.) |
 | Hook spec version mismatch | If Claude Code changes the stdin JSON schema, `push_confirm.py` and `build_log_reminder.py` may fail to parse fields. Both default to no-op in that case — safer than bad enforcement. `scope_drift_check.py` doesn't depend on payload fields, so it's unaffected. |
 
-Recommended post-install validation: run `python .claude/hooks/test_hooks.py`. All 43 tests should pass. Any failure indicates a broken install.
+Recommended post-install validation: run `python .claude/hooks/test_hooks.py`. All 58 tests should pass. Any failure indicates a broken install.
