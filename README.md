@@ -1,6 +1,6 @@
 # claude-chaperone
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue) ![Status](https://img.shields.io/badge/status-v0.1%20skeleton-orange)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue) ![Status](https://img.shields.io/badge/status-v1.1%20chaperone-orange)
 
 > A structured workflow for Claude Code sessions, optimized for output quality over token count.
 
