@@ -11,55 +11,6 @@ A one-line install (`curl | python`) that drops a structured build flow into any
 
 ---
 
-## Why this exists
-
-Long sessions are brittle:
-
-| Problem | What it looks like |
-|---|---|
-| Context rot | Quality slides as the conversation fills up |
-| Scope drift | "Helpful" edits to code you didn't ask about |
-| Self-audit blind spots | Reviewing its own work, it misses the same things twice |
-| Lost state | New session guesses where the last one stopped |
-| Infinite polish | Audit, fix, audit, fix, with no exit |
-| Forgotten discipline | Build logs, commits, handoffs skipped by accident |
-
-This repo has an answer for each.
-
-## What's in it
-
-**Twelve slash commands**, one per stage. You `/clear` between them so each runs in a fresh context *(plus an optional `/chaperone` entry-point router — not shown)*:
-
-```
-/meta-prompt  →  /plan  →  /plan-audit  →  /split-phases  →  /phase-audit
-                                                                   ↓
-             /wrap  ←  /test  ←  /re-audit  ←  /execute  ←  /build-audit  ←  /build
-```
-
-**Four hooks**, pure Python stdlib, no install step:
-
-- `scope_drift_check.py` warns at end of turn if edits left the phase scope
-- `push_confirm.py` forces a permission prompt on `git push`
-- `build_log_reminder.py` nags when code changes have outrun `BUILD_LOG.md`
-- `session_start.py` injects the current workflow state after `/clear` so Claude picks up where you left off
-
-**One skill** that auto-triggers the whole sequence on phrases like "new feature", "build phase", "audit", or "wrap up".
-
-After every `/clear`, the session-start hook re-orients Claude automatically — just paste the next command.
-
----
-
-## Requirements
-
-- [Claude Code](https://claude.com/claude-code) installed. v2.1.85 or later recommended (earlier versions work — hooks just fire slightly more often than needed).
-- Python 3.8 or later on `PATH`. The hooks are stdlib only, nothing to `pip install`.
-- macOS, Linux, or Windows.
-
-Optional: `codex`, `gemini`, or `aider` on `PATH` for second-opinion audits. If none are present, audits fall back to an isolated subagent (same model, fresh context).
-
-> [!WARNING]
-> Built for multi-phase work. If your task is a typo fix or a single-file change, skip this process.
-
 ## Quick start
 
 One-line install into your project:
@@ -114,6 +65,40 @@ cd your-project && python .claude/hooks/test_hooks.py
 
 ---
 
+## What's in it
+
+**Twelve slash commands**, one per stage. You `/clear` between them so each runs in a fresh context *(plus an optional `/chaperone` entry-point router — not shown)*:
+
+```
+/meta-prompt  →  /plan  →  /plan-audit  →  /split-phases  →  /phase-audit
+                                                                   ↓
+             /wrap  ←  /test  ←  /re-audit  ←  /execute  ←  /build-audit  ←  /build
+```
+
+**Four hooks**, Python stdlib:
+
+- `scope_drift_check.py` warns at end of turn if edits left the phase scope
+- `push_confirm.py` forces a permission prompt on `git push`
+- `build_log_reminder.py` nags when code changes have outrun `BUILD_LOG.md`
+- `session_start.py` injects the current workflow state after `/clear` so Claude picks up where you left off
+
+**One skill** that auto-triggers the whole sequence on phrases like "new feature", "build phase", "audit", or "wrap up".
+
+---
+
+## Requirements
+
+- [Claude Code](https://claude.com/claude-code) installed. v2.1.85 or later recommended (earlier versions work — hooks just fire slightly more often than needed).
+- Python 3.8 or later on `PATH`. The hooks are stdlib only, nothing to `pip install`.
+- macOS, Linux, or Windows.
+
+Optional: `codex`, `gemini`, or `aider` on `PATH` for second-opinion audits. If none are present, audits fall back to an isolated subagent (same model, fresh context).
+
+> [!WARNING]
+> Built for multi-phase work. If your task is a typo fix or a single-file change, skip this process.
+
+---
+
 ## Using it
 
 The skill auto-triggers on phrases like "new feature", "build phase", "audit", or "wrap up" — so in most sessions you just talk to Claude and it pulls you through the stages. If you want to drive manually, the slash commands map one-to-one onto the flow:
@@ -157,36 +142,7 @@ Each command ends by telling you the exact next one to run, so in practice it's 
 > [!IMPORTANT]
 > Don't skip the `/clear` calls. They wipe Claude's memory of the last stage so the next one runs in a fresh context. This is the single biggest quality mechanism in the workflow.
 
-**What the hooks do in the background:** warn on scope drift at end of turn, require a click on `git push`, nag if `BUILD_LOG.md` falls behind the code, and inject the current workflow state after every `/clear` so Claude doesn't need re-briefing.
-
-**What a real session looks like** — abbreviated transcript, first two stages for "add a dark mode toggle":
-
-**You:** `/meta-prompt "add a dark mode toggle to the settings page"`
-
-**Claude:** Before I can plan this, a few things need nailing down:
-1. Persistence — system preference, `localStorage`, or user profile in DB?
-2. Scope — just the settings page, or all routes?
-3. Default on first visit — follow system, or light mode?
-
-**You:** 1) localStorage. 2) All routes. 3) Follow system.
-**You:** `/clear`
-**You:** `/plan`
-
-**Claude:** *(writes `plan/plan.md` — architecture, files to touch, phase breakdown, test list)*
-
-Plan written. Two phases:
-1. ThemeProvider + useTheme hook
-2. Settings-page toggle + persistence
-
-Next: `/clear`, then `/plan-audit`.
-
 ---
-
-## Rules
-
-You own the architecture; Claude owns execution. `git push` always needs a human click — no auto-push, ever. Re-fix loops cap at 3, then you get pulled back in. Second-opinion tools (`codex`, `gemini`, `aider`) are optional; if none are on `PATH`, audits fall back to a fresh subagent.
-
-The reasoning behind the full rule set lives in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
 > [!NOTE]
 > Dormant unless the workflow is active (`plan/current_phase.txt` exists, or pre-phase plan files are present). Dropping the folder into a repo changes nothing until you start a workflow.
